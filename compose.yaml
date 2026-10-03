@@ -1,0 +1,93 @@
+services:
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    profiles: [observability]
+    ports:
+      - "127.0.0.1:6006:6006"
+    environment:
+      PHOENIX_WORKING_DIR: /data
+    volumes:
+      - phoenix-data:/data
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-firewall}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-firewall}
+      POSTGRES_DB: ${POSTGRES_DB:-firewall}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  firewall:
+    networks: [default, control]
+    build: ./firewall
+    ports:
+      - "${FIREWALL_PORT:-8001}:8001"
+    environment:
+      POLICY_PATH: ${POLICY_PATH:-/policies/standard.yaml}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-firewall}:${POSTGRES_PASSWORD:-firewall}@postgres:5432/${POSTGRES_DB:-firewall}
+      ADMIN_KEY: ${ADMIN_KEY:-}
+      OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://host.docker.internal:11434/v1}
+      TELEMETRY_OTLP_ENDPOINT: ${TELEMETRY_OTLP_ENDPOINT:-}
+      TELEMETRY_PROJECT: ${TELEMETRY_PROJECT:-ai-control-layer}
+      UPSTREAM_TIMEOUT_SECONDS: ${UPSTREAM_TIMEOUT_SECONDS:-60}
+    volumes:
+      # Read-write: dashboard edits persist, and the files can be edited on the host live.
+      - ./policies:/policies
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  chat:
+    networks: [control]
+    build: ./chat
+    environment:
+      LLM_MODEL: ${LLM_MODEL:-mock}
+      FIREWALL_URL: http://firewall:8001
+      FIREWALL_TIMEOUT_SECONDS: ${FIREWALL_TIMEOUT_SECONDS:-130}
+      AGENT_KEY: ${AGENT_KEY:-demo-agent-key}
+    depends_on:
+      firewall:
+        condition: service_healthy
+
+  chat-ingress:
+    image: nginx:stable-alpine
+    networks: [default, control]
+    ports:
+      - "127.0.0.1:${CHAT_PORT:-8000}:8000"
+    volumes:
+      - ./deploy/chat-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - chat
+
+  dashboard:
+    build: ./dashboard
+    ports:
+      - "${DASHBOARD_PORT:-8501}:8501"
+    environment:
+      FIREWALL_URL: http://firewall:8001
+      ADMIN_KEY: ${ADMIN_KEY:-}
+    depends_on:
+      firewall:
+        condition: service_healthy
+
+volumes:
+  phoenix-data:
+  pgdata:
+
+networks:
+  default: {}
+  control:
+    internal: true

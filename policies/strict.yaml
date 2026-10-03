@@ -1,0 +1,57 @@
+# =====================================================================
+# AI Control Layer Policy: STRICT preset
+#
+# This file is the single source of truth for what the firewall does.
+# It is reloaded automatically when saved: no restart needed.
+# If you save an invalid file, the firewall keeps the last good Policy
+# and shows the error in the dashboard (GET /v1/admin/policy).
+#
+# Modes for every Control:
+#   off      the Control does not run
+#   monitor  the Control runs and is recorded, but never changes the outcome
+#   redact   sensitive content is rewritten, the request goes through
+#   block    the request is stopped with an explanation
+# =====================================================================
+
+version_note: "strict preset: everything blocked, full audit content"
+
+defaults:
+  unknown_agent: block        # requests without a known X-Agent-Key: block | allow
+  on_error: block             # if a Control crashes: block (fail closed) | allow (fail open)
+
+# Every Agent calling the firewall, and the person or team accountable for it.
+agents:
+  - key: "demo-agent-key"     # value of the X-Agent-Key header (or Bearer token)
+    id: "research-assistant"
+    owner: "alice@bank.example"
+    team: "markets-research"
+  - key: "trading-agent-key"
+    id: "trading-assistant"
+    owner: "bob@bank.example"
+    team: "trading-desk"
+
+# Proxy mode: which OpenAI-compatible endpoint serves which model.
+upstreams:
+  - models: ["qwen3:4b"]
+    provider: ollama
+    base_url: "http://localhost:11434/v1"
+    base_url_env: OLLAMA_API_BASE   # local Ollama
+    api_key_env: null                        # NAME of an env var holding a key, never the key
+  - models: ["mock"]
+    provider: mock
+    base_url: "mock://"                      # built-in echo model for demos and tests
+
+# Proxy mode rejects any other model.
+allowed_models: ["qwen3:4b", "mock"]
+
+audit:
+  store_content: full         # full (before + after) | redacted (after the firewall) | none
+
+# ORDER MATTERS: Controls run top to bottom.
+controls:
+  keyword_blocklist:
+    mode: block
+    stages: [input, output]
+    description: "Blocks messages containing forbidden phrases (e.g. confidential deal code names)."
+    params:
+      keywords: ["project falcon", "project osprey", "insider list", "material non-public"]
