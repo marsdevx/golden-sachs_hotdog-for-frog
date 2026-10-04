@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PRESETS = REPO_ROOT / "policies"
+POLICY_FILE = REPO_ROOT / "policy.yaml"
 AGENT_KEY = "test-agent-key"
 
 BASE_POLICY = f"""
@@ -31,6 +31,21 @@ controls:
     params:
       keywords: ["project falcon"]
 """
+
+
+@pytest.fixture(autouse=True)
+def offline_injection_model(request, monkeypatch):
+    """policy.yaml runs injection_classifier with the real ONNX model. Tests must not depend on
+    whether the `ml` extra is installed, so the model is a stub that scores everything safe.
+    Tests marked `ml` get the real model."""
+    if request.node.get_closest_marker("ml"):
+        return
+    from firewall_app.controls.injection_model import MockScorer
+
+    monkeypatch.setattr(
+        "firewall_app.controls.injection_classifier.onnx_scorer",
+        lambda model, model_dir: MockScorer({}),
+    )
 
 
 def bump_mtime(path: Path) -> None:

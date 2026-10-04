@@ -1,13 +1,12 @@
 import pytest
-from conftest import BASE_POLICY, PRESETS
+from conftest import BASE_POLICY, POLICY_FILE
 from firewall_app.controls import REGISTRY
 from firewall_app.domain import Mode, Stage
-from firewall_app.policy import PolicyError, PolicyStore, dump_policy, parse_policy
+from firewall_app.policy import PolicyError, PolicyStore, parse_policy
 
 
-@pytest.mark.parametrize("preset", ["permissive", "standard", "strict"])
-def test_presets_load(preset):
-    store = PolicyStore(PRESETS / f"{preset}.yaml", REGISTRY)
+def test_policy_file_loads():
+    store = PolicyStore(POLICY_FILE, REGISTRY)
     policy = store.get()
     assert store.last_error is None
     assert len(policy.version) == 12
@@ -15,17 +14,16 @@ def test_presets_load(preset):
     assert all(settings.description for settings in policy.controls.values())
 
 
-def test_presets_differ_in_strictness():
-    modes = {
-        preset: PolicyStore(PRESETS / f"{preset}.yaml", REGISTRY).get()
-        for preset in ("permissive", "standard", "strict")
-    }
-    assert modes["permissive"].controls["keyword_blocklist"].mode == Mode.monitor
-    assert modes["standard"].controls["keyword_blocklist"].mode == Mode.block
-    assert modes["strict"].controls["keyword_blocklist"].mode == Mode.block
-    assert modes["strict"].defaults.unknown_agent == "block"
-    strict_keywords = modes["strict"].controls["keyword_blocklist"].parsed_params.keywords
-    assert len(strict_keywords) > 1
+def test_policy_file_runs_the_injection_controls():
+    policy = PolicyStore(POLICY_FILE, REGISTRY).get()
+    for control_id in ("injection_heuristics", "injection_classifier"):
+        settings = policy.controls[control_id]
+        assert settings.mode == Mode.block
+        assert settings.parsed_params.on_indirect == "redact"
+        assert REGISTRY.get(control_id).feature == "input_validation"
+    classifier = policy.controls["injection_classifier"]
+    assert classifier.on_error == "allow"
+    assert classifier.parsed_params.threshold == 0.9
 
 
 def test_effective_stages_default_to_supported(tmp_policy):
@@ -47,7 +45,6 @@ def test_hot_reload_on_mtime_change(tmp_policy):
     "broken, expected",
     [
         ("controls: [unclosed", "invalid YAML"),
-        (BASE_POLICY.replace("keyword_blocklist:", "no_such_control:"), "unknown Control id"),
         (BASE_POLICY.replace('keywords: ["project falcon"]', "keywords: 42"), "params.keywords"),
         (BASE_POLICY.replace("params:", "params:\n      typo_key: 1"), "unknown keys"),
         (BASE_POLICY.replace("mode: block", "mode: loud"), "mode"),
@@ -72,31 +69,65 @@ def test_invalid_edit_keeps_last_good_policy(tmp_policy, broken, expected):
 
 def test_invalid_initial_policy_fails_fast(tmp_policy):
     with pytest.raises(PolicyError):
-        PolicyStore(tmp_policy("controls:\n  nope:\n    mode: block\n"), REGISTRY)
-
-
-def test_write_is_validated_and_atomic(tmp_policy):
-    path = tmp_policy()
-    store = PolicyStore(path, REGISTRY)
-    with pytest.raises(PolicyError):
-        store.write("controls:\n  nope: {}\n")
-    assert path.read_text() == BASE_POLICY
-    assert list(path.parent.glob("*.tmp")) == []
-
-    new_text = BASE_POLICY.replace("test policy", "written")
-    policy = store.write(new_text)
-    assert path.read_text() == new_text
-    assert policy.version_note == "written"
-    assert store.version == policy.version
-
-
-def test_dump_round_trip(tmp_policy):
-    policy = parse_policy(BASE_POLICY, REGISTRY)
-    again = parse_policy(dump_policy(policy), REGISTRY)
-    assert again.model_dump() == policy.model_dump()
+        PolicyStore(tmp_policy("controls:\n  keyword_blocklist:\n    mode: loud\n"), REGISTRY)
 
 
 def test_unquoted_yaml_off_means_mode_off():
     policy = parse_policy("controls:\n  keyword_blocklist:\n    mode: off\n", REGISTRY)
     assert policy.controls["keyword_blocklist"].mode == Mode.off
-    assert "'off'" in dump_policy(policy) or '"off"' in dump_policy(policy)
+
+
+NO_PESEL = BASE_POLICY + """  sensitive_data:
+    mode: redact
+    params:
+      categories:
+        - name: email
+          patterns: ['[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+']
+"""
+PESEL = """        - name: pesel
+          description: "Polish national ID number (PESEL), required by the 2026 regulation"
+          patterns: ['\\b\\d{11}\\b']
+          validator: pesel_checksum
+          replacement: "[PESEL]"
+"""
+
+
+async def test_new_category_by_config_only(tmp_policy):
+    """The pitch story: a new regulation is a Policy edit, picked up on the next Check."""
+    from firewall_app.domain import Action, Agent, Check, Message
+    from firewall_app.pipeline import run_check
+
+    def reply(text):
+        return Check(stage=Stage.output, agent=Agent(id="a", owner="o"),
+                     message=Message(role="assistant", content=text))
+
+    store = PolicyStore(tmp_policy(NO_PESEL), REGISTRY)
+    first_version = store.version
+    result = await run_check(reply("PESEL 44051401359"), store.get())
+    assert result.decision.action == Action.allow
+
+    tmp_policy(NO_PESEL + PESEL)
+    policy = store.get()
+    assert policy.version != first_version
+    result = await run_check(reply("PESEL 44051401359"), policy)
+    assert result.decision.action == Action.redact
+    assert result.after.message.content == "PESEL [PESEL]"
+    assert [finding.type for finding in result.decision.findings] == ["pesel"]
+    bad_checksum = await run_check(reply("PESEL 44051401358"), policy)
+    assert bad_checksum.decision.action == Action.allow
+
+
+def test_reference_policy_sections_of_existing_controls_are_valid():
+    """policy.example.yaml is the contract. It does not load as a whole (planned settings),
+    but the section of every Control that exists must be valid for that Control."""
+    import yaml
+    from conftest import REPO_ROOT
+
+    reference = yaml.safe_load((REPO_ROOT / "policy.example.yaml").read_text())
+    controls = reference["controls"]
+    existing = {cid: section for cid, section in controls.items() if cid in REGISTRY}
+    assert {"loop_detector", "request_limits", "token_budget"} <= set(existing)
+    text = yaml.safe_dump({"features": reference["features"], "controls": existing},
+                          sort_keys=False)
+    policy = parse_policy(text, REGISTRY)
+    assert list(policy.controls)[:3] == ["loop_detector", "request_limits", "token_budget"]

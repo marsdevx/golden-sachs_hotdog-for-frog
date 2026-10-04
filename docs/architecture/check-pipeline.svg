@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-16 -16 1132 144" width="1132" height="144" role="img" aria-label="A Check passes Controls in Policy order. An allowing Control changes nothing, a redacting Control rewrites the content the next Control sees, and the first block stops the pipeline. The Decision is the most severe effective action, with a reason naming the Control.">
+<title>A Check passes Controls in Policy order. An allowing Control changes nothing, a redacting Control rewrites the content the next Control sees, and the first block stops the pipeline. The Decision is the most severe effective action, with a reason naming the Control.</title>
+<style>
+:root {
+  --bg: #F4F6F9; --surface: #FFFFFF; --surface-2: #E9EEF4; --ink: #17202B; --muted: #586474; --line: #C4CEDB;
+  --accent: #1E5BD0; --accent-ink: #FFFFFF; --fw-fill: #EEF3FC;
+  --block: #C2313A; --block-soft: #FBE5E6; --redact: #A86A12; --redact-soft: #FBEFD9;
+  --allow: #2C8251; --sem: #7445C4; --sem-soft: #F0E9FB;
+  
+  
+  
+ --body: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #0E131A; --surface: #161D27; --surface-2: #1D2633; --ink: #E5EAF1; --muted: #98A4B4; --line: #354256;
+  --accent: #6F9BFF; --accent-ink: #0B1220; --fw-fill: #142036;
+  --block: #F07A82; --block-soft: #3A1D22; --redact: #E2A84E; --redact-soft: #382B15;
+  --allow: #62C48E; --sem: #B699F2; --sem-soft: #271F3C;   } }
+text { font-family: var(--body); fill: var(--ink); }
+.bg { fill: var(--surface); }
+.t { font-size: 13px; font-weight: 600; }
+.s { font-size: 11px; fill: var(--muted); }
+.m { font-family: var(--mono); font-size: 12px; font-weight: 500; }
+.lbl { font-size: 10.5px; fill: var(--muted); }
+.lm { font-family: var(--mono); }
+.cap { font-family: var(--mono); font-size: 9.5px; letter-spacing: .08em; fill: var(--muted); }
+.fw-label { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; fill: var(--accent); font-weight: 500; }
+.note-b { font-size: 10.5px; fill: var(--block); }
+.note-r { font-size: 10.5px; fill: var(--redact); }
+.box { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+.ext { fill: var(--surface-2); stroke: var(--line); stroke-width: 1.2; }
+.cfg { fill: var(--surface); stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 5 3; }
+.fw { fill: var(--fw-fill); stroke: var(--accent); stroke-width: 2; }
+.strong { fill: var(--surface); stroke: var(--accent); stroke-width: 1.6; }
+.band { fill: var(--surface-2); stroke: none; }
+.band-sem { fill: var(--sem-soft); stroke: var(--sem); stroke-width: 1; }
+.sem-t { fill: var(--sem); }
+.badge { fill: var(--accent); }
+.badge-t { fill: var(--accent-ink); font-family: var(--mono); font-size: 11px; font-weight: 500; }
+.blk { fill: var(--block-soft); stroke: var(--block); stroke-width: 1.4; }
+.red { fill: var(--redact-soft); stroke: var(--redact); stroke-width: 1.4; }
+.ln { stroke: var(--ink); stroke-width: 1.3; fill: none; }
+.ln-d { stroke: var(--muted); stroke-width: 1.3; fill: none; stroke-dasharray: 5 4; }
+.ln-a { stroke: var(--accent); stroke-width: 1.3; fill: none; }
+.life { stroke: var(--line); stroke-width: 1.2; stroke-dasharray: 3 4; }
+.life-a { stroke: var(--accent); stroke-width: 2; }
+.frag { fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 6 4; }
+.mk { fill: var(--ink); }
+.mk-m { fill: var(--muted); }
+.mk-a { fill: var(--accent); }
+</style>
+<rect class="bg" x="-16" y="-16" width="1132" height="144" rx="10"/>
+
+          <defs>
+            <marker id="f2-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk"/></marker>
+          </defs>
+          <rect x="10" y="28" width="160" height="56" rx="8" class="box"/>
+          <text x="90" y="52" text-anchor="middle" class="t">Check</text>
+          <text x="90" y="69" text-anchor="middle" class="s">stage · agent · content</text>
+          <line x1="170" y1="56" x2="217" y2="56" class="ln" marker-end="url(#f2-a)"/>
+          <text x="194" y="49" text-anchor="middle" class="lbl">as sent</text>
+
+          <rect x="220" y="28" width="150" height="56" rx="8" class="box"/>
+          <text x="295" y="52" text-anchor="middle" class="t">Control · allow</text>
+          <text x="295" y="69" text-anchor="middle" class="s">nothing changes</text>
+          <line x1="370" y1="56" x2="417" y2="56" class="ln" marker-end="url(#f2-a)"/>
+          <text x="394" y="49" text-anchor="middle" class="lbl">same</text>
+
+          <rect x="420" y="28" width="150" height="56" rx="8" class="red"/>
+          <text x="495" y="52" text-anchor="middle" class="t">Control · redact</text>
+          <text x="495" y="69" text-anchor="middle" class="s">rewrites the content</text>
+          <line x1="570" y1="56" x2="617" y2="56" class="ln" marker-end="url(#f2-a)"/>
+          <text x="594" y="49" text-anchor="middle" class="lbl">redacted</text>
+
+          <rect x="620" y="28" width="150" height="56" rx="8" class="blk"/>
+          <text x="695" y="52" text-anchor="middle" class="t">Control · block</text>
+          <text x="695" y="69" text-anchor="middle" class="s">later Controls skipped</text>
+          <line x1="770" y1="56" x2="837" y2="56" class="ln" marker-end="url(#f2-a)"/>
+          <text x="804" y="49" text-anchor="middle" class="lbl">stop</text>
+
+          <rect x="840" y="20" width="250" height="72" rx="8" class="strong"/>
+          <text x="965" y="43" text-anchor="middle" class="t">Decision</text>
+          <text x="965" y="61" text-anchor="middle" class="s">most severe effective action wins</text>
+          <text x="965" y="77" text-anchor="middle" class="s">+ reason naming the deciding Control</text>
+        
+</svg>

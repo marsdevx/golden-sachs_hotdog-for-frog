@@ -156,10 +156,15 @@ class AuditStore:
         action: str | None = None,
         since: datetime | None = None,
         limit: int = 100,
+        session_id: str | None = None,
     ) -> list[AuditEvent]:
         """Audit Events, newest first."""
         await self.init()
         statement = self._select(stage, agent_id, action, since)
+        if session_id is not None:
+            statement = statement.where(
+                AuditEventRow.metadata_["session_id"].as_string() == session_id
+            )
         statement = statement.order_by(AuditEventRow.id.desc()).limit(limit)
         async with self.sessions() as session:
             rows = (await session.scalars(statement)).all()

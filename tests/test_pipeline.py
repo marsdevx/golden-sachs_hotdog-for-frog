@@ -24,6 +24,7 @@ SEEN: dict[str, list[str]] = {}
 @registry.control("always_allow")
 class AlwaysAllow(Control):
     stages = {Stage.input, Stage.output}
+    feature = "input_validation"
 
     async def evaluate(self, check, params):
         return Verdict()
@@ -34,6 +35,7 @@ class AlwaysRedact(Control):
     """Replaces every input message's content with a marker."""
 
     stages = {Stage.input}
+    feature = "input_validation"
 
     class Params(BaseModel):
         marker: str = "[R]"
@@ -52,6 +54,7 @@ class AlwaysRedact(Control):
 @registry.control("always_block")
 class AlwaysBlock(Control):
     stages = {Stage.input, Stage.output}
+    feature = "input_validation"
 
     async def evaluate(self, check, params):
         return Verdict(action=Action.block, reason="always blocks", risk_score=0.9)
@@ -60,6 +63,7 @@ class AlwaysBlock(Control):
 @registry.control("block_with_rewrite")
 class BlockWithRewrite(Control):
     stages = {Stage.input}
+    feature = "input_validation"
 
     async def evaluate(self, check, params):
         messages = [m.model_copy(update={"content": "safe"}) for m in check.messages]
@@ -69,6 +73,7 @@ class BlockWithRewrite(Control):
 @registry.control("always_review")
 class AlwaysReview(Control):
     stages = {Stage.input}
+    feature = "input_validation"
 
     async def evaluate(self, check, params):
         return Verdict(action=Action.review, reason="needs a human", risk_score=0.6)
@@ -77,6 +82,7 @@ class AlwaysReview(Control):
 @registry.control("raises")
 class Raises(Control):
     stages = {Stage.input}
+    feature = "input_validation"
 
     async def evaluate(self, check, params):
         raise ZeroDivisionError("boom")
@@ -87,6 +93,7 @@ class Recorder(Control):
     """Records the content it saw, keyed by the Check id."""
 
     stages = {Stage.input, Stage.output, Stage.tool_call}
+    feature = "input_validation"
 
     async def evaluate(self, check, params):
         SEEN.setdefault(check.check_id, []).extend(m.content for m in check.messages)
@@ -96,6 +103,7 @@ class Recorder(Control):
 @registry.control("slow")
 class Slow(Control):
     stages = {Stage.input}
+    feature = "input_validation"
 
     async def evaluate(self, check, params):
         await asyncio.sleep(0.02)

@@ -22,6 +22,7 @@ class CheckService:
         """Run one Check and persist its Audit Event (allowed ones too).
 
         A failed audit write raises: without evidence the Check fails closed."""
+        await self.audit.init()  # stateful Controls read their tables before the first append
         if not identity.allowed:
             finding = Finding(
                 control="identity", type="unknown_agent", detail="missing or unknown agent key"
@@ -33,4 +34,7 @@ class CheckService:
         return result
 
     async def record(self, result: PipelineResult, policy: Policy) -> None:
+        """Every Audit Event goes through here; `features.audit: false` writes none."""
+        if not policy.features.audit:
+            return
         await self.audit.append(AuditEvent.from_result(result, policy))

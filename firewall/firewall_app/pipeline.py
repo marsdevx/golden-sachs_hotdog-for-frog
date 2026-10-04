@@ -83,10 +83,15 @@ def _explain(verdicts: list[Verdict], action: Action) -> str:
     """Rule 6: a human-readable reason naming the Control that decided."""
     if action == Action.allow:
         flagged = [v for v in verdicts if v.action != Action.allow]
-        if not flagged:
-            return "No Control objected"
-        notes = ", ".join(f"{v.control} ({v.mode}): {v.reason}" for v in flagged)
-        return f"Allowed; recorded without enforcement: {notes}"
+        # An allowing Verdict with Findings is a warning (e.g. a budget almost used up).
+        warned = [v for v in verdicts if v.action == Action.allow and v.findings]
+        parts = []
+        if flagged:
+            notes = ", ".join(f"{v.control} ({v.mode}): {v.reason}" for v in flagged)
+            parts.append(f"recorded without enforcement: {notes}")
+        if warned:
+            parts.append("warnings: " + ", ".join(f"{v.control}: {v.reason}" for v in warned))
+        return "Allowed; " + "; ".join(parts) if parts else "No Control objected"
     deciding = [v for v in verdicts if v.effective_action == action]
     if action == Action.redact:
         return "Redacted by " + "; ".join(f"{v.control}: {v.reason}" for v in deciding)
@@ -107,8 +112,12 @@ async def run_check(
     verdicts: list[Verdict] = []
 
     for control_id, settings in policy.controls.items():
-        # Rule 1: Policy order, skipping Controls that are off or not active at this Stage.
-        if settings.mode == Mode.off or check.stage not in settings.effective_stages:
+        # Rule 1: Policy order, skipping Controls that are off (by Mode or by their feature)
+        # or not active at this Stage.
+        if not settings.active or check.stage not in settings.effective_stages:
+            continue
+        # A planned Control without code yet (see Policy.warnings).
+        if control_id not in registry:
             continue
         verdict = await _evaluate(control_id, settings, current, policy, registry, ctx)
         verdicts.append(verdict)

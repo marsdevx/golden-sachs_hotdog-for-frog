@@ -1,0 +1,6 @@
+PROJECT FALCON - client contacts (synthetic demo data)
+
+Nordbank AG, CFO: Jan Weber, jan.weber@nordbank.example, +49 151 2345 6789
+Nordbank AG, Head of Corporate Development: Eva Brandt, e.brandt@nordbank.example
+Vistula Logistics S.A., CEO: Piotr Nowak, p.nowak@vistula.example, +48 601 222 333
+Escrow account: PL61 1090 1014 0000 0712 1981 2874

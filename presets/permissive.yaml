@@ -1,0 +1,50 @@
+# Preset PERMISSIVE: observe only. Every Control runs and is recorded in the audit log,
+# nothing is blocked or changed. Use it to see what the firewall would do before enforcing.
+# Laid over `controls:` of policy.yaml when it says `preset: permissive`. Only differences here.
+
+controls:
+  loop_detector:
+    mode: monitor
+    params:
+      max_calls: 60
+      max_similar: 10
+      breaker_cooldown_seconds: 0   # record a loop, never stop the Agent
+
+  request_limits:
+    mode: monitor
+    params:
+      max_messages: 200
+      max_prompt_tokens: 32000
+      max_completion_tokens: 4096
+      max_tool_args_tokens: 8000
+      max_tool_result_tokens: 16000
+
+  token_budget:
+    mode: monitor
+    params:
+      default: {tokens_per_day: 1000000}
+      per_user: {tokens_per_day: 200000}
+      per_run: {requests: 100, tool_calls: 200, tokens: 1000000, wall_clock_seconds: 3600}
+
+  keyword_blocklist:
+    mode: monitor
+
+  attack_signatures:
+    mode: monitor
+
+  sensitive_data:
+    mode: monitor
+    params:
+      level: personal               # slider at its lowest: personal data only
+
+  injection_heuristics:
+    mode: monitor
+
+  resource_access:
+    mode: monitor
+
+  injection_classifier:
+    mode: monitor
+
+  output_sanitizer:
+    mode: monitor

@@ -1,4 +1,4 @@
-"""Provider-neutral contract for non-streaming text generation."""
+"""Provider-neutral contract for non-streaming text and tool-call generation."""
 from __future__ import annotations
 
 import time

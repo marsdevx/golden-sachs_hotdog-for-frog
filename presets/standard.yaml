@@ -1,0 +1,58 @@
+# Preset STANDARD: the everyday setting. Attacks and forbidden access are blocked, Sensitive
+# Data is masked, documents with an Injection stay usable (only that sentence is removed).
+# Laid over `controls:` of policy.yaml when it says `preset: standard`. Only differences here.
+
+controls:
+  loop_detector:
+    mode: block
+    params:
+      max_calls: 30
+      max_similar: 5
+      breaker_cooldown_seconds: 300
+
+  request_limits:
+    mode: block
+    params:
+      max_messages: 100
+      max_prompt_tokens: 8000
+      max_completion_tokens: 2048
+      require_max_tokens: false
+      max_tool_args_tokens: 4000
+      max_tool_result_tokens: 8000
+
+  token_budget:
+    mode: block
+    params:
+      default: {tokens_per_day: 200000}
+      per_user: {tokens_per_day: 50000}
+      per_run: {requests: 25, tool_calls: 40, tokens: 300000, wall_clock_seconds: 300}
+
+  keyword_blocklist:
+    mode: block
+
+  attack_signatures:
+    mode: block
+
+  sensitive_data:
+    mode: redact
+    stages: [output, tool_result]
+    params:
+      level: secrets                # personal + financial + secrets
+
+  injection_heuristics:
+    mode: block
+    params:
+      on_indirect: redact
+
+  resource_access:
+    mode: block
+
+  injection_classifier:
+    mode: block
+    on_error: allow                 # model missing: let requests through
+    params:
+      threshold: 0.9
+      on_indirect: redact
+
+  output_sanitizer:
+    mode: redact

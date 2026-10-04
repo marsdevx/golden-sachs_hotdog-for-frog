@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
 from firewall_app.controls.base import Registry
+from firewall_app.policy.presets import presets_dir_for
 from firewall_app.policy.schema import Policy, PolicyError, parse_policy
 
 logger = logging.getLogger("firewall.policy")
@@ -19,9 +18,18 @@ def policy_version(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()[:12]
 
 
+def _stamp(path: Path | None) -> tuple[int, int] | None:
+    if path is None:
+        return None
+    stat = path.stat()
+    return (stat.st_mtime_ns, stat.st_size)
+
+
 class PolicyStore:
-    """Checks the file's mtime on every `get()` and reloads when it changed.
-    An invalid file keeps the last good Policy and is reported in `last_error`."""
+    """Checks the mtime of the Policy file and of its preset file on every `get()` and reloads
+    when either changed.
+    An invalid file keeps the last good Policy and is reported in `last_error`.
+    Read-only: the firewall never writes the Policy file; people edit it."""
 
     def __init__(self, path: str | Path, registry: Registry) -> None:
         self.path = Path(path)
@@ -30,7 +38,9 @@ class PolicyStore:
         self.loaded_at: datetime | None = None
         self._policy: Policy | None = None
         self._text = ""
-        self._stamp: tuple[int, int] | None = None
+        self.presets_dir = presets_dir_for(self.path)
+        self._stamp: tuple | None = None
+        self._preset_file: Path | None = None
         self._reload()
         if self._policy is None:
             raise PolicyError([f"cannot load Policy {self.path}: {self.last_error}"])
@@ -46,8 +56,7 @@ class PolicyStore:
 
     def get(self) -> Policy:
         try:
-            stat = self.path.stat()
-            stamp = (stat.st_mtime_ns, stat.st_size)
+            stamp = (_stamp(self.path), _stamp(self._preset_file))
         except OSError as exc:
             self._fail(f"cannot read {self.path}: {exc}")
             stamp = self._stamp
@@ -56,59 +65,39 @@ class PolicyStore:
         assert self._policy is not None
         return self._policy
 
-    def validate(self, text: str) -> Policy:
-        return parse_policy(text, self.registry)
-
-    def write(self, text: str) -> Policy:
-        """Validate first, then replace the file atomically. Raises PolicyError if invalid."""
-        self.validate(text)
-        directory = self.path.parent
-        fd, tmp_name = tempfile.mkstemp(dir=directory, prefix=f".{self.path.name}.", suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                handle.write(text)
-            self._copy_ownership(tmp_name)
-            os.replace(tmp_name, self.path)
-        except BaseException:
-            Path(tmp_name).unlink(missing_ok=True)
-            raise
-        self._reload()
-        return self.get()
-
-    def _copy_ownership(self, tmp_name: str) -> None:
-        # Keep the file editable by whoever owned it (e.g. the host user behind a bind mount).
-        try:
-            stat = self.path.stat()
-        except OSError:
-            os.chmod(tmp_name, 0o644)
-            return
-        os.chmod(tmp_name, stat.st_mode & 0o777)
-        try:
-            os.chown(tmp_name, stat.st_uid, stat.st_gid)
-        except OSError:
-            pass
-
     def _reload(self) -> None:
         try:
-            stat = self.path.stat()
+            stamp = _stamp(self.path)
             data = self.path.read_bytes()
         except OSError as exc:
             self._fail(f"cannot read {self.path}: {exc}")
             return
         # Remember the stamp even on failure, so a broken file is not re-parsed on every get().
-        self._stamp = (stat.st_mtime_ns, stat.st_size)
+        self._stamp = (stamp, self._safe_stamp(self._preset_file))
         try:
             text = data.decode("utf-8")
-            policy = parse_policy(text, self.registry)
+            policy = parse_policy(text, self.registry, self.presets_dir)
         except (PolicyError, UnicodeDecodeError) as exc:
             self._fail(str(exc))
             return
-        policy._version = policy_version(data)
+        # Watch the preset file too: editing presets/strict.yaml applies like editing the Policy.
+        self._preset_file = policy.preset_file
+        self._stamp = (stamp, self._safe_stamp(self._preset_file))
+        policy._version = policy_version(data + policy._preset_text.encode())
         self._policy = policy
         self._text = text
         self.loaded_at = datetime.now(UTC)
         self.last_error = None
         logger.info("Policy %s loaded from %s", policy.version, self.path)
+        for warning in policy.warnings:
+            logger.warning("Policy %s: %s", self.path, warning)
+
+    @staticmethod
+    def _safe_stamp(path: Path | None) -> tuple[int, int] | None:
+        try:
+            return _stamp(path)
+        except OSError:
+            return None
 
     def _fail(self, error: str) -> None:
         if error != self.last_error:

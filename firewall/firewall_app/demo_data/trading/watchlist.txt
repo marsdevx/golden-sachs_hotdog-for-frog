@@ -1,0 +1,5 @@
+CEE EQUITIES DESK - watchlist (synthetic demo data)
+
+ALE   Allegro       results 2026-11-20, consensus EPS 0.41
+DNP   Dino Polska   same-store sales slowing, watch margins
+VSTL  Vistula       logistics volumes flat, no catalyst expected

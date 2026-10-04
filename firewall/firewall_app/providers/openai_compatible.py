@@ -32,9 +32,14 @@ class OpenAICompatibleAdapter:
             raise ValueError("only one text completion is supported")
         choice = choices[0]
         message = choice["message"]
-        if message.get("tool_calls") or message.get("function_call"):
-            raise ValueError("tool execution is not supported by the text gateway")
-        content = message["content"]
+        if message.get("function_call"):
+            raise ValueError("legacy function_call is not supported")
+        calls = message.get("tool_calls")
+        if calls and not request.options.get("tools"):
+            raise ValueError("unsolicited tool calls")
+        content = message.get("content")
+        if calls and content is None:
+            content = ""
         if not isinstance(content, str):
             raise ValueError("expected text completion")
         model = body.get("model") or request.model
@@ -43,7 +48,7 @@ class OpenAICompatibleAdapter:
             raise ValueError("expected usage object")
         return ModelResponse(
             model=model,
-            message=Message(role="assistant", content=content),
+            message=Message(role="assistant", content=content, tool_calls=calls),
             usage=Usage(model=model, prompt_tokens=raw_usage.get("prompt_tokens"),
                         completion_tokens=raw_usage.get("completion_tokens")),
             **{key: body[key] for key in ("id", "created") if key in body},

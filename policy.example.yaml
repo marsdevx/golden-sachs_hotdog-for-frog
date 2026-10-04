@@ -1,0 +1,223 @@
+# =====================================================================
+# AI Control Layer: REFERENCE Policy (target schema)
+#
+# What this file is
+#   The complete Policy we are building towards, with every setting the
+#   team agreed to keep. It is a reference and a contract for tickets,
+#   NOT a Preset: the firewall refuses unknown keys (extra="forbid"), so
+#   this file does not load today. The Presets in policies/ stay the
+#   single source of truth at runtime.
+#
+# Status tag on every setting:
+#   [exists]    already accepted by the firewall today
+#   [ticket N]  planned in docs/backlog.md, ticket N
+#   [proposed]  new, needs a backlog ticket (see docs/reference-policy/README.md)
+#
+# Rule of thumb: one Policy per firewall (each employee runs one on their own PC and owns it), Agents are entries in
+# it, and everything an Agent may do is a parameter of a Control.
+# Vocabulary: see CONTEXT.md (Policy, Control, Mode, Stage, Resource).
+# =====================================================================
+
+version_note: "reference policy: target schema, not loadable yet"
+
+defaults:                          # [exists]
+  unknown_agent: block             # no or unknown key: block | allow
+  on_error: block                  # a Control crashes: block (fail closed) | allow (fail open)
+
+# ---------------------------------------------------------------------
+# Agents: who calls the firewall and who is accountable for them.
+# ---------------------------------------------------------------------
+agents:
+  - key: "demo-agent-key"          # [exists] X-Agent-Key header or Bearer token
+    id: "research-assistant"       # [exists]
+    owner: "alice@bank.example"    # [exists] a person or team, shown in every Audit Event
+    team: "markets-research"       # [exists]
+    enabled: true                  # [proposed] kill switch: false stops this Agent on its next request
+    require_user: true             # [proposed] block requests with no "user" (who is the Agent acting for?)
+  - key: "trading-agent-key"
+    id: "trading-assistant"
+    owner: "bob@bank.example"
+    team: "trading-desk"
+    enabled: true
+    require_user: true
+
+# Proxy mode: which endpoint serves which model.
+upstreams:                         # [exists]
+  - models: ["qwen3:4b"]
+    provider: ollama
+    base_url: "http://localhost:11434/v1"
+    base_url_env: OLLAMA_API_BASE
+    api_key_env: null              # NAME of an env var holding a key, never the key itself
+  - models: ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-4-5"]
+    provider: anthropic
+    base_url: "https://api.anthropic.com/v1"
+    api_key_env: ANTHROPIC_API_KEY  # Claude; calls fail closed when it is unset
+  - models: ["mock"]
+    provider: mock
+    base_url: "mock://"
+
+allowed_models: ["qwen3:4b", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-4-5", "mock"]   # [exists] any other model is blocked in proxy mode
+
+# ---------------------------------------------------------------------
+# Features: master switches, to strip the firewall down with a few lines.
+# false = as if the feature did not exist; true restores everything as
+# configured. A Control runs only when its feature is on AND its mode is
+# not off. All false (and unknown_agent: allow) = close to plain Ollama.
+# ---------------------------------------------------------------------
+features:                          # [exists]
+  input_validation: true           # prompt checks: keyword_blocklist, injection_heuristics, injection_classifier
+  data_protection: true            # sensitive data masking: sensitive_data, output_sanitizer
+  resource_access: true            # file/folder access rules: resource_access
+  usage_limits: true               # loop_detector, request_limits, token_budget
+  attack_mitigation: true          # historical attack signatures: attack_signatures (R4)
+  audit: true                      # false: no Audit Events at all (console numbers stop)
+  console: true                    # false: /console returns 404
+
+# ---------------------------------------------------------------------
+# Audit: evidence for security and compliance.
+# ---------------------------------------------------------------------
+audit:
+  store_content: redacted          # [exists] full | redacted | none (what is kept of messages and tool args)
+  retention_days: 180              # [proposed] delete Audit Events older than this
+
+observability:                     # [proposed] only the exporter flavour; the endpoint stays an env var
+  semconv: openinference           # openinference | gen_ai (attribute names on model spans)
+
+# ---------------------------------------------------------------------
+# Controls. ORDER MATTERS: they run top to bottom. Cheap deterministic
+# Controls first, semantic ones after.
+# ---------------------------------------------------------------------
+controls:
+
+  # Runaway loops, per-request size and token budgets run FIRST: the pipeline stops at the
+  # first block, so a later Control would otherwise hide a looping Agent's calls and the
+  # tokens of replies it blocks.
+
+  # Loop detection: the same call over and over, or too many calls.
+  loop_detector:                   # [exists]
+    mode: block
+    description: "Stops runaway Agents that repeat themselves or call too often."
+    params:
+      window_seconds: 60
+      max_similar: 3               # block the 4th identical call inside the window
+      ignore_numbers: true         # [exists] "BTC at 101.5" and "BTC at 101.7" are identical
+      max_calls: 30                # [exists] any calls per Agent inside the window
+      breaker_cooldown_seconds: 300  # [exists] a loop stops the Agent for 5 min (0 = off);
+                                     # GET/DELETE /v1/settings/breakers lists and resets
+
+  # Size of one request: a ceiling, not a budget.
+  request_limits:                  # [exists]
+    mode: block                    # too big to fix -> block; max_tokens and long results are lowered/cut
+    description: "Caps the size of every single request, reply and Resource call."
+    params:
+      max_messages: 100
+      max_prompt_tokens: 8000      # estimated as characters / chars_per_token (4)
+      max_completion_tokens: 2048  # max_tokens above this is lowered; a longer reply is cut
+      require_max_tokens: false    # true: a request without max_tokens gets the ceiling
+      max_tool_args_tokens: 4000
+      max_tool_result_tokens: 8000 # a longer Resource result is cut
+
+  # Budgets: raw token counts only (no money), the same for paid and local models.
+  # A used-up budget blocks the next request; a reply is never cut, its tokens are counted.
+  token_budget:                    # [exists]
+    mode: block
+    description: "Stops an Agent, user or run that has used up its token budget."
+    params:
+      default:                     # the Agent, per UTC day
+        tokens_per_day: 200000
+        warn_at: 0.8               # budget_warning Finding at 80% (any budget block takes warn_at)
+      per_user:                    # each "user" value, per UTC day
+        tokens_per_day: 50000
+        warn_at: 0.8
+      per_run:                     # one Agent run: metadata.session_id, else one conversation
+        requests: 25
+        tool_calls: 40
+        tokens: 300000
+        wall_clock_seconds: 300
+        idle_seconds: 600          # a run with no call for this long is over
+        warn_at: 0.8
+      # GET /v1/settings/budgets: usage against these limits, per Agent, user and active run.
+
+  # Reference Control, exists today.
+  keyword_blocklist:               # [exists]
+    mode: block
+    stages: [input, output]
+    description: "Blocks messages containing forbidden phrases (e.g. confidential deal code names)."
+    params:
+      keywords: ["project falcon"]
+
+  # Historical attack mitigation (R4): signatures of exploits that have worked against AI
+  # systems before, from an externally managed feed (file or https:// URL), hot reloaded and
+  # labelled with their OWASP Agentic Top 10 code. Tune from the Policy with `categories`,
+  # `disabled`, `signatures` and `skip_args`; see policy.yaml for the full commentary.
+  attack_signatures:               # [exists]
+    mode: block                    # block | redact (input/tool_result only) | monitor | off
+    stages: [input, tool_call, tool_result]
+    on_error: block                # no usable feed -> fail closed
+    description: "Blocks payloads matching known historical attacks on AI systems, from an externally managed signature feed (OWASP Agentic Top 10)."
+    params:
+      feed: policies/signatures.yaml   # file path (relative to this Policy's folder) or https:// URL
+      refresh_seconds: 60              # URL feeds only; file feeds reload when they change
+      disabled: []                     # signature ids to switch off, e.g. after a false positive
+      skip_args: []                    # tool argument names never scanned at tool_call
+      signatures: []                   # this Policy's own signatures on top of the feed
+
+  # Output filtering: the showcase Control (mentor's slider demo).
+  pii_filter:                      # [ticket 1]
+    mode: redact
+    stages: [output, tool_result]
+    description: "Removes personal and financial data from what the AI returns."
+    params:
+      level: pii_financial         # pii < pii_financial < pii_financial_secrets
+      extra_categories: [salary, health]   # [proposed] more data classes to redact
+
+  # Prompt injection (OWASP LLM01), deterministic first. Direct (a "user" message) is
+  # blocked; indirect (a "tool" message or a tool_result) is removed or blocked per on_indirect.
+  # Guide: docs/implementation-guide-injection-controls.md
+  injection_heuristics:            # [exists]
+    mode: block
+    stages: [input, tool_result]
+    description: "Blocks known prompt-injection phrasing (English, Polish, German), also when hidden with encoding or look-alike letters; removes it from documents."
+    params:
+      on_indirect: redact          # [exists] redact (remove the sentence) | block
+      languages: [en, pl, de]      # [exists]
+      decode: [base64, hex, url, rot13]   # [exists] also match inside these encodings
+      extra_patterns: []           # [exists] own regexes, matched after normalization
+
+  # Resource access: which folders on the user's own PC the AI may read or write.
+  # Default deny. The user sets these rules for themselves. The deepest folder
+  # containing a path wins; two rules for the same folder: the strictest wins.
+  resource_access:                 # [exists]
+    mode: block
+    stages: [tool_call]
+    description: "The AI may only read or write files in the folders you allow here."
+    params:
+      resources: [files]           # [exists] tool-call Resources that are file systems
+      action_classes:              # [exists] action -> read | write; unlisted actions count as write
+        read_file: read
+        list_dir: read
+        write_file: write
+        delete_file: write
+      path_args: [path, paths, src, dst]   # [exists] argument names holding paths (any depth)
+      base_dir: /home/me           # [exists] relative paths resolve against this
+      default: none                # [exists] access outside every listed folder: none | read | write
+      folders:                     # [exists] the Access Rules (Windows paths like C:\Users\me work too)
+        - {path: /home/me/Projects, access: write}
+        - {path: /home/me/Documents, access: read}
+        - {path: /home/me/Documents/Private, access: none}
+        - {path: /home/me/.ssh, access: none, description: "Keys: never"}
+
+  # Semantic Control: a local model decides. Runs after the cheap ones.
+  injection_classifier:            # [exists]
+    mode: block
+    stages: [input, tool_result]
+    on_error: allow                # [exists] fail open if the model is missing (strict: block)
+    description: "A local AI model checks whether text tries to hijack the AI, catching reworded attacks the fixed patterns miss; removes it from documents."
+    params:
+      backend: onnx                # [exists] onnx (ml extra) | mock (tests)
+      model: "protectai/deberta-v3-base-prompt-injection-v2"   # [exists]
+      model_dir: null              # [exists] local copy; null: $INJECTION_MODEL_DIR, else HF cache
+      threshold: 0.9               # [exists] model score that counts as Injection
+      on_indirect: redact          # [exists] redact (remove flagged windows) | block
+      window_tokens: 512           # [exists] every window is scored, no cap
+      window_overlap: 64           # [exists]

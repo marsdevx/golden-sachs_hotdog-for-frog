@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AI Control Layer Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&display=swap">
+<style>
+:root {
+  --bg: #f4f6f8; --surface: #fdfdfc; --ink: #0f1720; --ink-2: #4a5462; --muted: #7d8794;
+  --line: #e0e4e9; --line-2: #c9cfd6; --accent: #2a78d6; --accent-soft: #e3eefb;
+  --s1: #2a78d6; --s2: #eb6834; --bar-neutral: #b9c6d6;
+  --good: #0ca30c; --warn: #fab219; --serious: #ec835a; --crit: #d03b3b;
+  --good-ink: #0a6e0a; --warn-ink: #8a5a00; --crit-ink: #b02a2a;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1319; --surface: #161c23; --ink: #eef2f6; --ink-2: #b4bdc8; --muted: #8590a0;
+  --line: #252d37; --line-2: #343e4a; --accent: #3987e5; --accent-soft: #1b2b40;
+  --s1: #3987e5; --s2: #d95926; --bar-neutral: #3a4a5e;
+  --good-ink: #3fcf3f; --warn-ink: #fab219; --crit-ink: #f07272; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0e1319; --surface: #161c23; --ink: #eef2f6; --ink-2: #b4bdc8; --muted: #8590a0;
+  --line: #252d37; --line-2: #343e4a; --accent: #3987e5; --accent-soft: #1b2b40;
+  --s1: #3987e5; --s2: #d95926; --bar-neutral: #3a4a5e;
+  --good-ink: #3fcf3f; --warn-ink: #fab219; --crit-ink: #f07272; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--body); }
+[hidden] { display: none !important; }
+.wrap { max-width: 1320px; margin: 0 auto; padding-inline: 20px; padding-block: 0 48px; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; text-wrap: balance; margin: 0; }
+h2 { font-size: 15px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+h3 { font-size: 13px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.num { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+button, select, input { font: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+header.top { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+.top .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding-block: 12px; }
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+.brand h1 { font-size: 20px; }
+.brand span { color: var(--muted); font-size: 12px; }
+nav.tabs { display: flex; gap: 2px; flex-wrap: wrap; }
+nav.tabs a { text-decoration: none; color: var(--ink-2); padding: 5px 10px; border-radius: 6px; font-size: 13px; }
+nav.tabs a:hover { background: var(--accent-soft); color: var(--ink); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--line-2); font-size: 12px; color: var(--ink-2); background: var(--surface); white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.live { background: var(--good); animation: pulse 2s infinite; }
+@keyframes pulse { 70% { box-shadow: 0 0 0 6px transparent; } 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 60%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .dot.live { animation: none; } }
+
+section { padding-top: 28px; scroll-margin-top: 70px; }
+.sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.sec-head p { margin: 0; color: var(--muted); font-size: 12.5px; }
+.grid { display: grid; gap: 14px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+.panel > h3 { margin-bottom: 12px; }
+
+.summary { grid-template-columns: minmax(280px, 1.1fr) 2fr; }
+.posture { display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: center; }
+.ring { position: relative; width: 132px; height: 132px; }
+.ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring .val { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.ring .val b { font: 600 40px/1 var(--display); }
+.ring .val span { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.comp { display: grid; gap: 8px; }
+.comp-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 12.5px; }
+.comp-row .bar { grid-column: 1 / -1; height: 5px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.comp-row .bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.comp-row small { grid-column: 1 / -1; color: var(--muted); font-size: 11.5px; }
+.kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 720px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpi { display: flex; flex-direction: column; gap: 4px; }
+.kpi b { font: 600 30px/1.1 var(--display); }
+.kpi .sub { color: var(--muted); font-size: 12px; }
+
+.alert { display: flex; gap: 12px; align-items: flex-start; border: 1px solid color-mix(in srgb, var(--crit) 45%, var(--line));
+  background: color-mix(in srgb, var(--crit) 9%, var(--surface)); border-radius: 10px; padding: 12px 14px; margin-top: 14px; }
+.alert.warn { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); background: color-mix(in srgb, var(--warn) 12%, var(--surface)); }
+.alert .ic { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--crit); color: #fff; display: grid; place-content: center; font-weight: 700; font-size: 13px; }
+.alert.warn .ic { background: var(--warn); color: #000; }
+.alert p { margin: 0; }
+.alert small { color: var(--ink-2); }
+
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { fill: var(--muted); font: 11px var(--body); font-variant-numeric: tabular-nums; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); margin-bottom: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--surface); padding: 6px 8px;
+  border-radius: 6px; font-size: 12px; white-space: nowrap; transform: translate(-50%, calc(-100% - 8px)); z-index: 3; }
+.live-grid { grid-template-columns: 1fr; }
+.three { grid-template-columns: repeat(3, 1fr); }
+.two { grid-template-columns: 1.4fr 1fr; }
+
+.hbars { display: grid; gap: 7px; }
+.hbar { display: grid; grid-template-columns: minmax(110px, 38%) 1fr auto; gap: 10px; align-items: center; font-size: 12.5px; }
+.hbar .track { height: 14px; position: relative; }
+.hbar .track i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 0 4px 4px 0; background: var(--s1); min-width: 2px; }
+.hbar .lab { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase;
+  padding: 6px 10px; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.r, th.r { text-align: right; }
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 500;
+  border: 1px solid currentColor; white-space: nowrap; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.p-block { color: var(--crit-ink); }
+.p-redact, .p-review { color: var(--warn-ink); }
+.p-monitor { color: var(--accent); }
+.p-off { color: var(--muted); }
+.p-off { color: var(--muted); }
+.p-allow { color: var(--good-ink); }
+.feed-wrap { max-height: 420px; overflow: auto; }
+
+.audit-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.field { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+select, input, .btn { border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); border-radius: 7px; padding: 6px 10px; }
+.btn { cursor: pointer; font-weight: 500; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn:disabled { opacity: .5; cursor: default; }
+td select { padding: 3px 6px; }
+.note { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+.empty { color: var(--muted); font-size: 12.5px; margin: 0; }
+
+
+@media (max-width: 980px) { .summary, .two, .three { grid-template-columns: 1fr; } }
+@media (max-width: 520px) { .posture { grid-template-columns: 1fr; justify-items: center; } .wrap { padding-inline: 16px; } .kpi b { font-size: 26px; } nav.tabs { display: none; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><h1>AI Control Layer</h1><span>Security &amp; usage console</span></div>
+    <nav class="tabs" aria-label="Sections">
+      <a href="#live">Live</a><a href="#runs">Agent runs</a><a href="#threats">Threats</a><a href="#usage">Usage</a><a href="#controls">Controls</a><a href="#audit">Audit log</a>
+    </nav>
+    <div class="chips">
+      <span class="chip"><span class="dot" id="liveDot"></span><span id="srcLabel">Connecting</span></span>
+      <span class="chip mono" id="policyChip">policy</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="overview" style="padding-top:18px">
+    <div class="grid summary">
+      <div class="panel">
+        <h3>Overall security posture</h3>
+        <div class="posture"><div class="ring" id="ring"></div><div class="comp" id="comp"></div></div>
+      </div>
+      <div class="grid kpis" id="kpis"></div>
+    </div>
+    <div id="alerts"></div>
+  </section>
+
+  <section id="live">
+    <div class="sec-head"><h2>Real time</h2><p>Last 60 minutes, 1-minute buckets, refreshes every 3 seconds</p></div>
+    <div class="grid live-grid">
+      <div class="panel">
+        <h3>Checks and blocked interactions per minute</h3>
+        <div class="legend"><span><i style="background:var(--bar-neutral)"></i>Allowed or redacted</span><span><i style="background:var(--crit)"></i>Blocked or sent to review</span></div>
+        <div class="chart" id="minuteChart"></div>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:14px">
+      <h3>Latest blocked, redacted and reviewed interactions</h3>
+      <div class="tbl-wrap feed-wrap"><table id="feed"><thead><tr>
+        <th>Time</th><th>Action</th><th>Stage</th><th>Agent</th><th>Owner</th><th>Controls</th><th class="r">Risk</th><th>Reason</th>
+      </tr></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="runs">
+    <div class="sec-head"><h2>Agent runs</h2><p>Model checks, tool permissions and execution results</p></div>
+    <div class="panel">
+      <label for="runFilter">Run ID (optional)</label>
+      <input id="runFilter" placeholder="Paste the run ID from chat" autocomplete="off">
+      <button id="loadRun" type="button">Load steps</button>
+      <p id="runStatus" role="status"></p>
+      <div class="tbl-wrap"><table id="runSteps"><thead><tr>
+        <th>Time</th><th>Run</th><th>Step</th><th>Stage</th><th>Tool</th><th>Execution</th><th>Decision</th><th>Reason</th>
+      </tr></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="threats">
+    <div class="sec-head"><h2>Blocked threats</h2><p>Last 24 hours</p></div>
+    <div class="grid three">
+      <div class="panel"><h3>Blocks by Control</h3><div class="hbars" id="byControl"></div></div>
+      <div class="panel"><h3>Checks by Stage</h3><div class="hbars" id="byStage"></div></div>
+      <div class="panel"><h3>Top Agents by blocks</h3><div class="tbl-wrap"><table id="byAgent"><thead><tr><th>Agent</th><th>Owner</th><th class="r">Blocks</th></tr></thead><tbody></tbody></table></div></div>
+    </div>
+  </section>
+
+  <section id="usage">
+    <div class="sec-head"><h2>Resource consumption</h2><p>Last 24 hours, tokens as reported by the Upstream</p></div>
+    <div class="grid two">
+      <div class="panel">
+        <h3>Tokens per hour</h3>
+        <div class="chart" id="hourChart"></div>
+      </div>
+      <div class="panel">
+        <h3>Tokens by model</h3><div class="hbars" id="byModel"></div>
+        <h3 style="margin-top:18px">Tokens by Agent</h3><div class="hbars" id="tokByAgent"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="controls">
+    <div class="sec-head"><h2>Controls</h2><p id="ctrlNote">Read live from the Policy file. To change a Mode, edit that file and save it; the next Check uses it.</p></div>
+    <div class="panel"><div class="tbl-wrap"><table id="ctrlTable"><thead><tr>
+      <th>Control</th><th>Stages</th><th>Mode</th><th class="r">Fired 24h</th><th class="r">Blocked 24h</th><th>Last fired</th>
+    </tr></thead><tbody></tbody></table></div></div>
+  </section>
+
+  <section id="audit">
+    <div class="sec-head"><h2>Audit log export</h2><p>One row per Check in CSV, full Audit Events in JSONL</p></div>
+    <div class="panel">
+      <div class="audit-controls">
+        <label class="field">Report<select id="fPreset">
+          <option value="">All events</option><option value="block">Blocked</option><option value="redact">Redacted</option>
+          <option value="review">Review</option><option value="allow">Allowed</option></select></label>
+        <label class="field">Agent<select id="fAgent"><option value="">All agents</option></select></label>
+        <label class="field">Window<select id="fWindow"><option value="1">Last hour</option><option value="24" selected>Last 24 hours</option><option value="0">All time</option></select></label>
+        <label class="field">Format<select id="fFmt"><option value="csv">CSV</option><option value="jsonl">JSONL</option></select></label>
+        <button type="button" class="btn primary" id="exportBtn">Download export</button>
+      </div>
+      <p class="note" id="exportNote">Downloads straight from the firewall audit store.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const API = '/v1/settings';
+  let S = null, busy = false;
+  const fmtInt = v => Number(v).toLocaleString('en-US');
+  // The API sends UTC ("...Z"); show the time in this computer's own time zone.
+  const hhmm = ts => ts ? new Date(ts).toLocaleTimeString('en-GB', { hour12: false }) : '–';
+  const esc = s => String(s ?? '–').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const STAGE = { input: 'Input', output: 'Output', tool_call: 'Tool call', tool_result: 'Tool result' };
+
+  async function call(path, opts = {}) {
+    const r = await fetch(API + path, { cache: 'no-store', ...opts });
+    if (!r.ok) {
+      let d = r.statusText; try { const j = await r.json(); d = typeof j.detail === 'string' ? j.detail : (j.detail?.errors || []).join('; ') || d; } catch {}
+      throw new Error(r.status + ': ' + d);
+    }
+    return r;
+  }
+
+  // ---------- charts ----------
+  function niceStep(raw) { const p = Math.pow(10, Math.floor(Math.log10(raw || 1))); const n = raw / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
+  function columns(el, data, keys, colors, opts) {
+    const W = 720, H = 220, L = 44, R = 8, T = 10, B = 26;
+    const max = Math.max(1, ...data.map(d => keys.reduce((a, k) => a + d[k], 0)));
+    const step = niceStep(max / 4), top = Math.ceil(max / step) * step;
+    const bw = (W - L - R) / data.length, gap = Math.min(2, bw * 0.2);
+    const y = v => T + (H - T - B) * (1 - v / top);
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${opts.label}">`;
+    for (let v = 0; v <= top + 1e-9; v += step) {
+      s += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${css(v === 0 ? '--line-2' : '--line')}"/>`;
+      s += `<text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${opts.yfmt(v)}</text>`;
+    }
+    const rects = [];
+    data.forEach((d, i) => {
+      const x = L + i * bw + gap / 2, w = Math.max(1, bw - gap); let acc = 0;
+      keys.forEach((k, j) => {
+        const v = d[k]; if (v <= 0) return;
+        const y0 = y(acc), y1 = y(acc + v); acc += v;
+        s += `<rect x="${x}" y="${y1}" width="${w}" height="${Math.max(0, y0 - y1 - (j > 0 ? 1 : 0))}" fill="${colors[j]}"/>`;
+      });
+      rects.push({ x0: L + i * bw, x1: L + (i + 1) * bw, top: y(acc), html: opts.tip(d) });
+      const lab = opts.xlabel(d, i); if (lab) s += `<text x="${x + w / 2}" y="${H - 8}" text-anchor="middle">${lab}</text>`;
+    });
+    el.innerHTML = s + '</svg>';
+    let tip = document.createElement('div'); tip.className = 'tip'; tip.hidden = true; el.appendChild(tip);
+    el.onmousemove = e => {
+      const svg = el.querySelector('svg'), b = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
+      const x = (e.clientX - b.left) / b.width * vb.width, hit = rects.find(r => x >= r.x0 && x < r.x1);
+      if (!hit) { tip.hidden = true; return; }
+      tip.hidden = false; tip.innerHTML = hit.html;
+      tip.style.left = ((hit.x0 + hit.x1) / 2 / vb.width * b.width) + 'px'; tip.style.top = (hit.top / vb.height * b.height) + 'px';
+    };
+    el.onmouseleave = () => { tip.hidden = true; };
+  }
+  function hbars(el, rows, color) {
+    const max = Math.max(1, ...rows.map(r => r.v));
+    el.innerHTML = rows.length ? rows.map(r => `<div class="hbar" title="${esc(r.label)}: ${r.v}"><span class="lab">${esc(r.label)}</span>
+      <span class="track"><i style="width:${r.v / max * 100}%;background:${color || 'var(--s1)'}"></i></span><span class="num">${fmtInt(r.v)}</span></div>`).join('')
+      : '<p class="empty">Nothing in this window.</p>';
+  }
+
+  // ---------- render ----------
+  function render() {
+    const t = S.totals_24h, P = S.posture;
+    $('#policyChip').textContent = `policy ${S.policy.version} · preset ${S.policy.preset || 'custom'}${S.policy.note ? ' · ' + S.policy.note : ''}`;
+
+    const r = 56, c = 2 * Math.PI * r, col = P.score >= 85 ? css('--good') : P.score >= 65 ? css('--warn') : css('--crit');
+    $('#ring').innerHTML = `<svg viewBox="0 0 132 132" aria-hidden="true"><circle cx="66" cy="66" r="${r}" fill="none" stroke="${css('--line')}" stroke-width="10"/>
+      <circle cx="66" cy="66" r="${r}" fill="none" stroke="${col}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${c * P.score / 100} ${c}"/></svg>
+      <div class="val"><b class="num">${P.score}</b><span>${esc(P.grade)} · of 100</span></div>`;
+    $('#comp').innerHTML = P.components.map(k => `<div class="comp-row"><span>${esc(k.name)}</span><span class="num">${k.points} / ${k.weight}</span>
+      <span class="bar"><i style="width:${k.score * 100}%"></i></span><small>${esc(k.detail)}${k.gaps.length ? ' · gaps: ' + k.gaps.map(esc).join(', ') : ''}</small></div>`).join('');
+
+    const p95 = t.latency_p95_ms, p50 = t.latency_p50_ms;
+    $('#kpis').innerHTML = [
+      ['Checks', fmtInt(t.requests), `24h · ${fmtInt(t.allowed)} allowed`],
+      ['Blocked', fmtInt(t.blocked), `${(t.block_rate * 100).toFixed(1)}% of checks · ${fmtInt(t.review)} sent to review`],
+      ['Redacted', fmtInt(t.redacted), '24h · content rewritten, request went through'],
+      ['Tokens', fmtInt(t.tokens), `24h across ${S.usage.by_model.length} model(s)`],
+      ['Layer latency', p95 == null ? 'n/a' : p95.toFixed(1) + ' ms', `p95 · p50 ${p50 == null ? 'n/a' : p50.toFixed(1) + ' ms'}`],
+      ['Active Agents', fmtInt(S.agents.length), '24h · seen in the audit log'],
+    ].map(([h, v, sub]) => `<div class="panel kpi"><h3>${h}</h3><b class="num">${v}</b><span class="sub">${esc(sub)}</span></div>`).join('');
+
+    let alerts = S.realtime.anomalies.map(a => `<div class="alert" role="alert"><span class="ic">!</span><p>
+      <b>Volume anomaly on ${esc(a.agent)}</b>: ${a.last_5m} checks in the last 5 minutes, ${a.ratio}x its usual ${a.baseline_5m}.
+      <br><small>Owner: ${esc(a.owner)}</small></p></div>`).join('');
+    if (S.policy.last_error) alerts += `<div class="alert warn" role="alert"><span class="ic">!</span><p><b>Policy file has an error.</b> The last good version is active.<br><small>${esc(S.policy.last_error)}</small></p></div>`;
+    const F = S.features || {};
+    if (F.audit === false) alerts += `<div class="alert warn" role="status"><span class="ic">i</span><p><b>Audit logging is switched off</b> (<span class="mono">features.audit: false</span> in the Policy). New requests are not recorded, so the numbers below stop growing.</p></div>`;
+    const offGroups = ['input_validation', 'data_protection', 'resource_access', 'usage_limits', 'attack_mitigation'].filter(g => F[g] === false);
+    if (offGroups.length) alerts += `<div class="alert warn" role="status"><span class="ic">i</span><p><b>Switched off in the Policy:</b> ${offGroups.map(g => `<span class="mono">${esc(g)}</span>`).join(', ')}. Their Controls do not run.</p></div>`;
+    $('#alerts').innerHTML = alerts;
+
+    columns($('#minuteChart'), S.realtime.minutes.map(m => ({ ...m, ok: m.requests - m.blocked })), ['ok', 'blocked'],
+      [css('--bar-neutral'), css('--crit')], { label: 'Checks per minute, last hour', yfmt: v => v,
+        tip: d => `<b>${hhmm(d.t).slice(0, 5)}</b> · ${d.requests} checks · ${d.blocked} blocked`,
+        xlabel: (d, i) => (i % 10 === 0 || i === 59) ? hhmm(d.t).slice(0, 5) : '' });
+
+    $('#feed tbody').innerHTML = S.realtime.feed.length ? S.realtime.feed.map(e => `<tr><td class="mono">${hhmm(e.ts)}</td>
+      <td><span class="pill p-${e.decision}">${esc(e.decision)}</span></td><td>${esc(STAGE[e.stage] || e.stage)}</td><td class="mono">${esc(e.agent)}</td>
+      <td>${esc(e.owner)}</td><td class="mono">${esc(e.controls.join(', '))}</td><td class="r num">${e.risk_score.toFixed(2)}</td><td>${esc(e.reason)}</td></tr>`).join('')
+      : '<tr><td colspan="8" class="empty">No blocked, redacted or reviewed interactions in the last 24 hours.</td></tr>';
+
+    hbars($('#byControl'), S.threats.by_control.map(([k, v]) => ({ label: k, v })), 'var(--crit)');
+    hbars($('#byStage'), S.threats.by_stage.map(([k, v]) => ({ label: STAGE[k] || k, v })));
+    $('#byAgent tbody').innerHTML = S.threats.by_agent.filter(a => a.blocked).map(a =>
+      `<tr><td class="mono">${esc(a.agent)}</td><td>${esc(a.owner)}</td><td class="r num">${a.blocked}</td></tr>`).join('')
+      || '<tr><td colspan="3" class="empty">No blocks.</td></tr>';
+
+    columns($('#hourChart'), S.usage.hourly, ['tokens'], [css('--s1')], { label: 'Tokens per hour, last 24 hours',
+      yfmt: v => v >= 1000 ? (v / 1000) + 'k' : v,
+      tip: d => `<b>${hhmm(d.t).slice(0, 5)}</b> · ${fmtInt(d.tokens)} tokens · ${d.requests} checks`,
+      xlabel: (d, i) => i % 4 === 0 ? hhmm(d.t).slice(0, 5) : '' });
+    hbars($('#byModel'), S.usage.by_model.filter(m => m.tokens).map(m => ({ label: m.key, v: m.tokens })));
+    hbars($('#tokByAgent'), S.usage.by_agent.filter(a => a.tokens).map(a => ({ label: a.agent, v: a.tokens })), 'var(--s2)');
+
+    renderControls();
+    const sel = $('#fAgent'), cur = sel.value;
+    sel.innerHTML = '<option value="">All agents</option>' + S.agents.map(a => `<option ${a === cur ? 'selected' : ''}>${esc(a)}</option>`).join('');
+  }
+
+  function renderControls() {
+    $('#ctrlTable tbody').innerHTML = S.controls.map(c => `<tr><td><span class="mono">${esc(c.id)}</span><br><small style="color:var(--muted)">${esc(c.description)}</small></td>
+      <td>${c.stages.map(s => esc(STAGE[s] || s)).join(', ')}</td>
+      <td>${c.feature_on === false
+        ? `<span class="pill p-off">off</span><br><small style="color:var(--muted)">feature <span class="mono">${esc(c.feature)}</span> is off (mode ${esc(c.mode)})</small>`
+        : `<span class="pill p-${esc(c.mode)}">${esc(c.mode)}</span>`}</td>
+      <td class="r num">${fmtInt(c.fired_24h)}</td><td class="r num">${fmtInt(c.blocked_24h)}</td><td class="mono">${hhmm(c.last_fired)}</td></tr>`).join('')
+      || '<tr><td colspan="6" class="empty">No Controls in the Policy.</td></tr>';
+  }
+
+  // ---------- export ----------
+  $('#exportBtn').onclick = async () => {
+    const b = $('#exportBtn'), note = $('#exportNote'), fmt = $('#fFmt').value;
+    const p = new URLSearchParams({ format: fmt });
+    if ($('#fPreset').value) p.set('action', $('#fPreset').value);
+    if ($('#fAgent').value) p.set('agent_id', $('#fAgent').value);
+    const hours = +$('#fWindow').value; if (hours) p.set('since', new Date(Date.now() - hours * 3600e3).toISOString());
+    b.disabled = true;
+    try {
+      const blob = await (await call('/events/export?' + p)).blob();
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `audit-events.${fmt}`; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      note.textContent = `Downloaded audit-events.${fmt} (${(blob.size / 1024).toFixed(1)} KB).`;
+    } catch (err) { note.textContent = 'Export failed: ' + err.message; }
+    b.disabled = false;
+  };
+
+  async function loadRun() {
+    const session = $('#runFilter').value.trim();
+    const params = new URLSearchParams({limit: '200'});
+    if (session) params.set('session_id', session);
+    try {
+      const events = await (await call('/events?' + params)).json();
+      $('#runSteps tbody').innerHTML = events.slice().reverse().map(e => {
+        const m = e.metadata || {};
+        return `<tr><td class="mono">${hhmm(e.ts)}</td><td class="mono">${esc(m.session_id || '—')}</td><td>${esc(m.step ?? '—')}</td>
+          <td>${esc(e.stage)}</td><td>${esc(m.tool_name || '—')}</td>
+          <td>${esc(m.execution || '—')}</td><td>${esc(e.action)}</td><td>${esc(e.reason)}</td></tr>`;
+      }).join('');
+      $('#runStatus').textContent = `${events.length} most recent checks, shown in execution order.`;
+    } catch (err) { $('#runStatus').textContent = 'Could not load steps: ' + err.message; }
+  }
+  $('#loadRun').onclick = loadRun;
+  loadRun();
+
+  // ---------- polling ----------
+  async function poll() {
+    if (busy) return; busy = true;
+    try {
+      S = await (await call('/summary')).json(); render();
+      $('#liveDot').className = 'dot live'; $('#srcLabel').textContent = 'Live';
+    } catch (err) {
+      $('#liveDot').className = 'dot';
+      $('#srcLabel').textContent = 'Firewall unreachable';
+    }
+    busy = false;
+  }
+  poll(); setInterval(poll, 3000);
+})();
+</script>
+</body></html>

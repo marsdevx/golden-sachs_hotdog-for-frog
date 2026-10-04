@@ -1,7 +1,10 @@
-.PHONY: test lint up down logs
+.PHONY: test test-suites lint up down logs
 
 test:
 	uv run pytest
+
+test-suites:
+	uv run pytest test_suites -rxX
 
 lint:
 	uv run ruff check .

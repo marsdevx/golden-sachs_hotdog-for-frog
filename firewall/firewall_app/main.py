@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI
 
-from firewall_app.api import admin, check, proxy
+from firewall_app.api import check, console, gemini, proxy, tools, user_settings
 from firewall_app.controls import REGISTRY
 from firewall_app.observability.tracing import configure
 from firewall_app.policy import PolicyStore
@@ -51,6 +52,10 @@ def create_app(
 
     application.include_router(check.router)
     application.include_router(proxy.router)
-    application.include_router(admin.router)
+    application.include_router(tools.router)
+    application.include_router(gemini.router)
+    if os.getenv("FIREWALL_SETTINGS_ENABLED", "true").lower() == "true":
+        application.include_router(user_settings.router)
+        application.include_router(console.router)
 
     return application

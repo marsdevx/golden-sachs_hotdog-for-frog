@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Literal
 
 import yaml
@@ -17,6 +18,7 @@ from pydantic import (
 
 from firewall_app.controls.base import Registry
 from firewall_app.domain import Mode, Stage
+from firewall_app.policy.presets import CUSTOM, PRESETS, apply_preset, preset_path
 from firewall_app.providers import registry as provider_registry
 
 FailAction = Literal["block", "allow"]
@@ -37,6 +39,9 @@ class AgentEntry(StrictModel):
     id: str = Field(min_length=1)
     owner: str = Field(min_length=1)
     team: str | None = None
+    # Planned (docs/reference-policy): accepted so the Policy loads, not enforced yet.
+    enabled: bool | None = None
+    require_user: bool | None = None
 
 
 class UpstreamEntry(StrictModel):
@@ -57,8 +62,24 @@ class UpstreamEntry(StrictModel):
         return value
 
 
+class Features(StrictModel):
+    """Master switches. false = as if the feature did not exist. A Control runs only when its
+    feature is on AND its own mode is not off, so switching a feature back on restores every
+    Control as it is configured."""
+
+    input_validation: bool = True  # prompt checks (keyword_blocklist, ...)
+    data_protection: bool = True  # sensitive_data, output_sanitizer
+    resource_access: bool = True  # resource_access (folders on this PC)
+    usage_limits: bool = True  # loop_detector, request_limits, token_budget
+    attack_mitigation: bool = True  # historical attack signatures (attack_signatures)
+    audit: bool = True  # false: no Audit Events are written
+    console: bool = True  # false: the web console page is gone (404)
+
+
 class AuditSettings(StrictModel):
     store_content: Literal["full", "redacted", "none"] = "redacted"
+    # Planned: accepted so the Policy loads, not enforced yet.
+    retention_days: int | None = None
 
 
 class ControlSettings(StrictModel):
@@ -76,11 +97,27 @@ class ControlSettings(StrictModel):
 
     _parsed_params: BaseModel | None = PrivateAttr(default=None)
     _supported_stages: frozenset[Stage] = PrivateAttr(default=frozenset())
+    _feature: str = PrivateAttr(default="")
+    _feature_on: bool = PrivateAttr(default=True)
 
     @property
     def parsed_params(self) -> BaseModel:
         assert self._parsed_params is not None, "Policy was not validated against a registry"
         return self._parsed_params
+
+    @property
+    def feature(self) -> str:
+        """The `features:` switch this Control belongs to."""
+        return self._feature
+
+    @property
+    def feature_on(self) -> bool:
+        return self._feature_on
+
+    @property
+    def active(self) -> bool:
+        """Runs at all: its feature is on and its Mode is not off."""
+        return self._feature_on and self.mode != Mode.off
 
     @property
     def effective_stages(self) -> frozenset[Stage]:
@@ -89,19 +126,37 @@ class ControlSettings(StrictModel):
 
 class Policy(StrictModel):
     version_note: str = ""
+    # Strictness level laid over `controls:` from presets/<name>.yaml; custom = as written.
+    preset: Literal[PRESETS + (CUSTOM,)] = CUSTOM  # type: ignore[valid-type]
     defaults: Defaults = Field(default_factory=Defaults)
     agents: list[AgentEntry] = Field(default_factory=list)
     upstreams: list[UpstreamEntry] = Field(default_factory=list)
     allowed_models: list[str] = Field(default_factory=list)
+    features: Features = Field(default_factory=Features)
     audit: AuditSettings = Field(default_factory=AuditSettings)
+    # Planned: accepted so the Policy loads, not used yet.
+    observability: dict[str, Any] = Field(default_factory=dict)
     # Order matters: the pipeline runs Controls top to bottom.
     controls: dict[str, ControlSettings] = Field(default_factory=dict)
 
     _version: str = PrivateAttr(default="")
+    # Settings the Policy names but the firewall does not implement yet: loaded, ignored.
+    _warnings: list[str] = PrivateAttr(default_factory=list)
+    # The preset file merged in, and its text (the loader watches it and hashes it).
+    _preset_file: Path | None = PrivateAttr(default=None)
+    _preset_text: str = PrivateAttr(default="")
+
+    @property
+    def preset_file(self) -> Path | None:
+        return self._preset_file
 
     @property
     def version(self) -> str:
         return self._version
+
+    @property
+    def warnings(self) -> list[str]:
+        return list(self._warnings)
 
 
 class PolicyError(ValueError):
@@ -119,8 +174,9 @@ def _format_validation_error(exc: ValidationError, prefix: str = "") -> list[str
     return errors
 
 
-def parse_policy(text: str, registry: Registry) -> Policy:
-    """Parse and fully validate a Policy document. Raises PolicyError with every problem found."""
+def parse_policy(text: str, registry: Registry, presets_dir: Path | None = None) -> Policy:
+    """Parse and fully validate a Policy document, with its preset laid over `controls:`.
+    Raises PolicyError with every problem found."""
     try:
         data = yaml.safe_load(text)
     except yaml.YAMLError as exc:
@@ -130,12 +186,25 @@ def parse_policy(text: str, registry: Registry) -> Policy:
     if not isinstance(data, dict):
         raise PolicyError(["the Policy must be a YAML mapping"])
 
+    preset_warnings: list[str] = []
+    preset_file: Path | None = None
+    preset_text = ""
+    try:
+        preset_file = preset_path(data.get("preset", CUSTOM), presets_dir)
+        if preset_file is not None:
+            preset_text = preset_file.read_text(encoding="utf-8")
+            preset_warnings = apply_preset(data, data["preset"], preset_text)
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        raise PolicyError([str(exc)]) from exc
+
     try:
         policy = Policy.model_validate(data)
     except ValidationError as exc:
         raise PolicyError(_format_validation_error(exc)) from exc
 
     errors: list[str] = []
+    warnings = preset_warnings + _not_implemented(policy)
+    policy._preset_file, policy._preset_text = preset_file, preset_text
     seen_models: set[str] = set()
     for index, upstream in enumerate(policy.upstreams):
         if upstream.provider not in provider_registry.names():
@@ -150,7 +219,9 @@ def parse_policy(text: str, registry: Registry) -> Policy:
     for control_id, settings in policy.controls.items():
         cls = registry.get(control_id)
         if cls is None:
-            errors.append(f"controls.{control_id}: unknown Control id")
+            # A planned Control (docs/backlog.md) stays in the Policy and is skipped until
+            # its code exists. The console shows the warning, so a typo is still visible.
+            warnings.append(f"controls.{control_id}: Control not implemented yet, skipped")
             continue
         unknown = set(settings.params) - set(cls.Params.model_fields)
         if unknown:
@@ -160,6 +231,8 @@ def parse_policy(text: str, registry: Registry) -> Policy:
         except ValidationError as exc:
             errors.extend(_format_validation_error(exc, f"controls.{control_id}.params."))
         settings._supported_stages = frozenset(cls.stages)
+        settings._feature = cls.feature
+        settings._feature_on = getattr(policy.features, cls.feature)
         if settings.stages is not None:
             unsupported = set(settings.stages) - set(cls.stages)
             if unsupported:
@@ -171,10 +244,20 @@ def parse_policy(text: str, registry: Registry) -> Policy:
             settings.description = cls.description
     if errors:
         raise PolicyError(errors)
+    policy._warnings = warnings
     return policy
 
 
-def dump_policy(policy: Policy) -> str:
-    """Serialize a Policy back to YAML. Comments in the original file are not preserved."""
-    data = policy.model_dump(mode="json", exclude_none=True)
-    return yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+def _not_implemented(policy: Policy) -> list[str]:
+    """Planned settings that are set in the Policy but have no effect yet."""
+    warnings = []
+    for index, agent in enumerate(policy.agents):
+        for name in ("enabled", "require_user"):
+            if getattr(agent, name) is not None:
+                warnings.append(f"agents.{index}.{name}: not implemented yet, ignored")
+    if policy.audit.retention_days is not None:
+        warnings.append("audit.retention_days: not implemented yet, ignored")
+    if policy.observability:
+        warnings.append("observability: not implemented yet, ignored")
+    return warnings
+

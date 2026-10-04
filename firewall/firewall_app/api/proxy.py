@@ -14,11 +14,22 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from firewall_app.api.check import dump_decision
-from firewall_app.domain import Action, Check, Finding, Message, Stage, Transport, Usage
+from firewall_app.domain import (
+    Action,
+    Check,
+    Finding,
+    Message,
+    Stage,
+    Transport,
+    Usage,
+    most_severe,
+)
 from firewall_app.identity import resolve_agent
 from firewall_app.pipeline import PipelineResult, denied
 from firewall_app.providers.base import ModelRequest, ProviderError
 from firewall_app.providers.manager import ProviderManager
+from firewall_app.runs import run_id_of
+from firewall_app.tools.files import definitions
 
 logger = logging.getLogger("firewall.proxy")
 router = APIRouter(tags=["proxy"])
@@ -51,8 +62,26 @@ def _parse_messages(raw: Any) -> list[Message]:
         if not isinstance(item, dict):
             raise ValueError("each message must be an object")
         role = "system" if item.get("role") == "developer" else item.get("role")
-        messages.append(Message(role=role, content=_text(item.get("content"))))
+        messages.append(Message(
+            role=role, content=_text(item.get("content")),
+            tool_calls=item.get("tool_calls"), tool_call_id=item.get("tool_call_id"),
+        ))
     return messages
+
+
+MAX_TOKENS_KEYS = ("max_completion_tokens", "max_tokens")  # new OpenAI name first
+
+
+def _requested_max_tokens(body: dict[str, Any]) -> tuple[str, int | None]:
+    """The reply ceiling the caller asked for, and the key it used (default `max_tokens`)."""
+    for key in MAX_TOKENS_KEYS:
+        value = body.get(key)
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError(f"{key} must be a positive integer")
+        return key, value
+    return "max_tokens", None
 
 
 def _section(result: PipelineResult | None) -> dict[str, Any] | None:
@@ -62,10 +91,22 @@ def _section(result: PipelineResult | None) -> dict[str, Any] | None:
 
 
 def _firewall(input_result: PipelineResult, output_result: PipelineResult | None = None):
+    """Summary of the whole completion: the most severe Decision of both Stages, so a
+    redaction on input still shows when the reply itself was clean."""
     final = output_result or input_result
+    stages = {"input": input_result, "output": output_result}
+    results = {stage: result for stage, result in stages.items() if result is not None}
+    action = most_severe(result.decision.action for result in results.values())
+    deciding = {s: r for s, r in results.items() if r.decision.action == action}
+    if action == Action.allow:
+        reason = final.decision.reason
+    elif len(deciding) == 1:
+        reason = next(iter(deciding.values())).decision.reason
+    else:
+        reason = "; ".join(f"{stage}: {r.decision.reason}" for stage, r in deciding.items())
     return {
-        "action": final.decision.action,
-        "reason": final.decision.reason,
+        "action": action,
+        "reason": reason,
         "policy_version": final.decision.policy_version,
         "input": _section(input_result),
         "output": _section(output_result),
@@ -112,12 +153,17 @@ async def chat_completions(request: Request) -> JSONResponse:
     metadata = body.get("metadata", {})
     if not isinstance(metadata, dict):
         return openai_error(400, "metadata must be an object", "invalid_request_error")
+    try:
+        max_tokens_key, max_tokens = _requested_max_tokens(body)
+    except ValueError as exc:
+        return openai_error(400, str(exc), "invalid_request_error")
 
     state = request.app.state
     service = state.service
     policy = state.policy_store.get()
     identity = resolve_agent(request.headers, policy)
     user = body.get("user") if isinstance(body.get("user"), str) else None
+    run_id = run_id_of(messages, metadata)  # input and output of this call share the run
 
     def make_check(stage: Stage, **content: Any) -> Check:
         return Check(
@@ -125,12 +171,15 @@ async def chat_completions(request: Request) -> JSONResponse:
             agent=identity.agent,
             user=user,
             metadata=metadata,
+            run_id=run_id,
             transport=Transport.proxy,
             **content,
         )
 
     # Input Stage.
-    input_check = make_check(Stage.input, messages=messages, usage=Usage(model=model))
+    input_check = make_check(
+        Stage.input, messages=messages, max_tokens=max_tokens, usage=Usage(model=model)
+    )
     if identity.allowed and model not in policy.allowed_models:
         finding = Finding(
             control="allowed_models", type="model_not_allowed", detail=f"model {model!r}"
@@ -145,7 +194,12 @@ async def chat_completions(request: Request) -> JSONResponse:
 
     # The adapter sees only messages returned by the input pipeline.
     options = {key: value for key, value in body.items()
-               if key not in {"model", "messages", "metadata", "stream"}}
+               if key not in {"model", "messages", "metadata", "stream", "enable_tools"}}
+    if body.get("enable_tools") is True:
+        options["tools"] = definitions()
+    # A Control may have lowered or set the reply ceiling (request_limits).
+    if input_result.after.max_tokens is not None:
+        options[max_tokens_key] = input_result.after.max_tokens
     try:
         manager = ProviderManager(
             state.settings.upstream_timeout_seconds, state.upstream_transport,
@@ -174,9 +228,14 @@ async def chat_completions(request: Request) -> JSONResponse:
 
     # Output Stage.
     usage = result.usage
-    output_result = await service.run(
-        make_check(Stage.output, message=reply, usage=usage), policy, identity
-    )
+    output_check = make_check(Stage.output, message=reply, usage=usage)
+    if reply.tool_calls:
+        output_check.metadata = {
+            **metadata, "execution": "model_proposed",
+            "tool_name": ", ".join(call.function.name for call in reply.tool_calls),
+            "tool_call_ids": [call.id for call in reply.tool_calls],
+        }
+    output_result = await service.run(output_check, policy, identity)
     firewall = _firewall(input_result, output_result)
     if output_result.decision.action in ENFORCED:
         blocked = _blocked_completion(model, output_result, firewall)

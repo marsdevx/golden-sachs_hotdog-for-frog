@@ -1,7 +1,9 @@
 """Resolve a model using the current policy snapshot and call its adapter."""
 from __future__ import annotations
 
+import logging
 import os
+import time
 from typing import TYPE_CHECKING
 
 import httpx
@@ -13,6 +15,9 @@ from firewall_app.providers.registry import ProviderRegistry
 
 if TYPE_CHECKING:
     from firewall_app.policy.schema import Policy
+
+
+logger = logging.getLogger("firewall.providers")
 
 
 class ProviderManager:
@@ -41,6 +46,7 @@ class ProviderManager:
         connection = Connection(base_url=override or entry.base_url, api_key=api_key)
         async with httpx.AsyncClient(transport=self.transport, timeout=self.timeout) as client:
             provider = self.providers.create(entry.provider, connection, client)
+            started = time.monotonic()
             try:
                 with self.telemetry.llm(
                     request.model, entry.provider, self.observation_context
@@ -67,4 +73,15 @@ class ProviderManager:
                 result.usage.model = result.model
                 return result
             except Exception as exc:
-                raise ProviderError(f"adapter {entry.provider!r} failed") from exc
+                # Do not log exception text, response bodies or URLs: they can contain secrets.
+                detail = type(exc).__name__
+                if isinstance(exc, httpx.TimeoutException):
+                    detail += f" (configured timeout {self.timeout:g}s)"
+                elif isinstance(exc, httpx.HTTPStatusError):
+                    detail += f" (HTTP {exc.response.status_code})"
+                logger.warning(
+                    "Provider failure adapter=%s model=%s cause=%s elapsed=%.2fs check_id=%s",
+                    entry.provider, request.model, detail, time.monotonic() - started,
+                    (self.observation_context or {}).get("firewall.input_check_id", "unknown"),
+                )
+                raise ProviderError(f"adapter {entry.provider!r} failed: {detail}") from exc

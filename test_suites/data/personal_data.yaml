@@ -1,0 +1,42 @@
+# Test data for UC-02 "Redact personal data in answers".
+# All values are synthetic (documented test numbers, made-up names). Add a case with one line.
+#
+#   redact: the text must NOT appear in the answer; its category label must.
+#   keep:   the text must come back unchanged (it only looks like personal data).
+#   tier:   `stretch` = known gap in the current Policy. Reported as xfail, not as a failure.
+
+redact:
+  # --- personal ---
+  - {id: email,                  category: email, text: "ivan.petrov@bank.com"}
+  - {id: email-uppercase,        category: email, text: "IVAN.PETROV@BANK.COM"}
+  - {id: email-at-dot-brackets,  category: email, text: "ivan.petrov [at] bank [dot] com"}
+  - {id: email-name-over-64-chars, category: email, text: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx@bank.com"}
+  - {id: phone-international,    category: phone, text: "+48 600 123 456"}
+  - {id: phone-dashes,           category: phone, text: "+44-20-7946-0958"}
+  # --- payment ---
+  - {id: card-plain,             category: card, text: "4111111111111111"}
+  - {id: card-spaces,            category: card, text: "4111 1111 1111 1111"}
+  - {id: card-dashes,            category: card, text: "4111-1111-1111-1111"}
+  - {id: card-mastercard,        category: card, text: "5555 5555 5555 4444"}
+  - {id: card-amex-4-6-5,        category: card, text: "3782 822463 10005"}
+  - {id: card-fullwidth-digits,  category: card, text: "４１１１ １１１１ １１１１ １１１１"}
+  - {id: iban-gb,                category: iban, text: "GB82WEST12345698765432"}
+  - {id: iban-gb-spaced,         category: iban, text: "GB82 WEST 1234 5698 7654 32"}
+  - {id: iban-pl,                category: iban, text: "PL61 1090 1014 0000 0712 1981 2874"}
+  # --- known gaps (found by probing the standard Preset) ---
+  - {id: email-in-words,         category: email, tier: stretch, text: "ivan dot petrov at bank dot com",
+     note: "obfuscation with plain words, no brackets"}
+  - {id: phone-local-no-prefix,  category: phone, tier: stretch, text: "600 123 456",
+     note: "national format without +<country code>"}
+  - {id: card-dots,              category: card,  tier: stretch, text: "4111.1111.1111.1111",
+     note: "dots as separators"}
+
+keep:
+  - {id: not-a-card-fails-luhn,  text: "1234 5678 9012 3456"}
+  - {id: date-and-time,          text: "2026-10-03 at 14:30"}
+  - {id: version-number,         text: "3.11.4"}
+  - {id: ticket-id,              text: "JIRA-12345"}
+  - {id: money-amount,           text: "1,234,567.89 USD"}
+  - {id: iban-with-bad-checksum, text: "GB00 WEST 1234 5698 7654 32"}
+  - {id: short-extension,        text: "ext 1234"}
+  - {id: plain-sentence,         text: "The quarterly review is on Friday."}

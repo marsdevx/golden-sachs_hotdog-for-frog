@@ -1,5 +1,6 @@
 services:
   phoenix:
+    networks: [default, upstream]
     image: arizephoenix/phoenix:latest
     profiles: [observability]
     ports:
@@ -10,6 +11,7 @@ services:
       - phoenix-data:/data
 
   postgres:
+    networks: [storage]
     image: postgres:16
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-firewall}
@@ -24,21 +26,25 @@ services:
       retries: 10
 
   firewall:
-    networks: [default, control]
+    networks: [control, upstream, storage]
     build: ./firewall
-    ports:
-      - "${FIREWALL_PORT:-8001}:8001"
-    environment:
-      POLICY_PATH: ${POLICY_PATH:-/policies/standard.yaml}
+    environment: &firewall-env
+      FIREWALL_SETTINGS_ENABLED: "false"
+      POLICY_PATH: /config/policy.yaml
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-firewall}:${POSTGRES_PASSWORD:-firewall}@postgres:5432/${POSTGRES_DB:-firewall}
-      ADMIN_KEY: ${ADMIN_KEY:-}
       OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://host.docker.internal:11434/v1}
       TELEMETRY_OTLP_ENDPOINT: ${TELEMETRY_OTLP_ENDPOINT:-}
       TELEMETRY_PROJECT: ${TELEMETRY_PROJECT:-ai-control-layer}
       UPSTREAM_TIMEOUT_SECONDS: ${UPSTREAM_TIMEOUT_SECONDS:-60}
+      OLLAMA_TOOL_REASONING_EFFORT: ${OLLAMA_TOOL_REASONING_EFFORT:-none}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
-      # Read-write: dashboard edits persist, and the files can be edited on the host live.
-      - ./policies:/policies
+      - ./policy.yaml:/config/policy.yaml:ro
+      - ./presets:/config/presets:ro      # `preset:` in policy.yaml; a folder, so edits always show
+      # The externally managed attack-signature feed, next to the Policy so the relative
+      # `feed: policies/signatures.yaml` resolves. Hot reloaded from the host on save.
+      - ./policies/signatures.yaml:/config/policies/signatures.yaml:ro
+      - ./firewall/firewall_app/demo_data:/service/firewall_app/demo_data
     depends_on:
       postgres:
         condition: service_healthy
@@ -49,6 +55,26 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # The user's console has policy write access; agents cannot reach its network.
+  firewall-console:
+    networks: [default, storage]
+    build: ./firewall
+    ports:
+      - "127.0.0.1:${FIREWALL_PORT:-8001}:8001"
+    environment:
+      <<: *firewall-env
+      FIREWALL_SETTINGS_ENABLED: "true"
+    volumes:
+      - ./policy.yaml:/config/policy.yaml
+      - ./presets:/config/presets:ro
+      - ./firewall/firewall_app/demo_data:/service/firewall_app/demo_data
+      - ./policies/signatures.yaml:/config/policies/signatures.yaml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      firewall:
+        condition: service_healthy
 
   chat:
     networks: [control]
@@ -72,22 +98,14 @@ services:
     depends_on:
       - chat
 
-  dashboard:
-    build: ./dashboard
-    ports:
-      - "${DASHBOARD_PORT:-8501}:8501"
-    environment:
-      FIREWALL_URL: http://firewall:8001
-      ADMIN_KEY: ${ADMIN_KEY:-}
-    depends_on:
-      firewall:
-        condition: service_healthy
-
 volumes:
   phoenix-data:
   pgdata:
 
 networks:
   default: {}
+  upstream: {}
+  storage:
+    internal: true
   control:
     internal: true

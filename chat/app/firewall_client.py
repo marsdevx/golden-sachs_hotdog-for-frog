@@ -56,6 +56,16 @@ class ProxyReply(BaseModel):
     usage: Usage = Field(default_factory=Usage)
 
 
+class ToolReply(BaseModel):
+    operation_id: str
+    tool_call_id: str
+    executed: bool
+    decision: WireDecision
+    tool_result: str | None
+    call_check_id: str
+    result_check_id: str | None
+
+
 class FirewallClient:
     """HTTP boundary; the chat service never imports firewall implementation code."""
 
@@ -74,7 +84,8 @@ class FirewallClient:
                 headers={"X-Agent-Key": self.settings.agent_key},
             ) as client:
                 response = await client.post(path, json=payload)
-                response.raise_for_status()
+                if response.is_error:
+                    raise RuntimeError(f"Firewall {path} returned HTTP {response.status_code}")
                 return response.json()
         except (httpx.HTTPError, ValueError) as exc:
             raise RuntimeError("Firewall unavailable or returned an invalid response") from exc
@@ -85,6 +96,7 @@ class FirewallClient:
             "model": self.settings.llm_model,
             "messages": [message.model_dump() for message in messages],
             "stream": False,
+            "enable_tools": True,
             **self._context(user if isinstance(user, str) else None, metadata),
         }
         data = await self._post("/v1/chat/completions", payload)
@@ -99,6 +111,26 @@ class FirewallClient:
         except (ValidationError, ValueError) as exc:
             raise RuntimeError("Firewall returned an invalid completion") from exc
         return reply
+
+    async def execute_tool(
+        self, tool: ToolCall, tool_call_id: str, metadata: dict[str, Any],
+    ) -> ToolReply:
+        user = metadata.get("user")
+        data = await self._post("/v1/tools/execute", {
+            "tool": tool.model_dump(), "tool_call_id": tool_call_id,
+            **self._context(user if isinstance(user, str) else None, metadata),
+        })
+        try:
+            result = ToolReply.model_validate(data)
+            if result.tool_call_id != tool_call_id:
+                raise ValueError("tool call mismatch")
+            if result.decision.action not in {"block", "review"} and (
+                not result.executed or result.tool_result is None or not result.result_check_id
+            ):
+                raise ValueError("missing checked tool result")
+        except (ValidationError, ValueError) as exc:
+            raise RuntimeError("Firewall returned an invalid tool response") from exc
+        return result
 
     async def health(self) -> dict[str, Any]:
         try:

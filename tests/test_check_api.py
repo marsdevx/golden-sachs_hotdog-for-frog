@@ -122,3 +122,20 @@ def test_hot_reload_through_http(client, agent_headers, tmp_policy):
 
 def test_health(client):
     assert client.get("/health").json() == {"status": "ok"}
+
+
+def test_tool_result_iban_is_redacted(make_firewall_app, agent_headers):
+    policy = BASE_POLICY + """  sensitive_data:
+    mode: redact
+    params:
+      categories:
+        - name: iban
+          patterns: ['\\b[A-Z]{2}\\d{2}(?: ?[A-Z0-9]){11,30}\\b']
+          validator: iban
+"""
+    client = TestClient(make_firewall_app(policy))
+    body = {"tool": TOOL, "tool_result": "client 7 pays to DE89 3704 0044 0532 0130 00"}
+    response = client.post("/v1/check/tool_result", json=body, headers=agent_headers).json()
+    assert response["decision"]["action"] == "redact"
+    assert response["tool_result"] == "client 7 pays to [IBAN]"
+    assert response["decision"]["findings"][0]["type"] == "iban"

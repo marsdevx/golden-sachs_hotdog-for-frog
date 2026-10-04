@@ -46,11 +46,27 @@ def most_severe(actions: Iterable[Action]) -> Action:
 class Transport(StrEnum):
     check_api = "check_api"
     proxy = "proxy"
+    gemini = "gemini"  # Gemini CLI through /gemini/ (api/gemini.py)
+
+
+class FunctionCall(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    arguments: str = Field(max_length=32768)
+
+
+class ModelToolCall(BaseModel):
+    id: str = Field(min_length=1, max_length=128)
+    type: Literal["function"] = "function"
+    function: FunctionCall
 
 
 class Message(BaseModel):
     role: Literal["system", "user", "assistant", "tool"]
     content: str
+    tool_calls: list[ModelToolCall] | None = Field(
+        default=None, max_length=8, exclude_if=lambda v: v is None,
+    )
+    tool_call_id: str | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class ToolCall(BaseModel):
@@ -81,6 +97,7 @@ class Content(BaseModel):
     message: Message | None = None
     tool: ToolCall | None = None
     tool_result: str | None = None
+    max_tokens: int | None = Field(default=None, ge=1)  # input Stage: the reply ceiling
 
 
 class Check(BaseModel):
@@ -95,6 +112,10 @@ class Check(BaseModel):
     tool: ToolCall | None = None
     tool_result: str | None = None
     usage: Usage | None = None
+    # The Agent run this Check belongs to (see runs.py); stamped by the transport.
+    run_id: str | None = None
+    # Input Stage: the most reply tokens the caller asked for (None: no limit was requested).
+    max_tokens: int | None = Field(default=None, ge=1)
     labels: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
     # Recorded in the Audit Event only. Controls must never branch on it.
@@ -106,6 +127,7 @@ class Check(BaseModel):
             message=self.message,
             tool=self.tool,
             tool_result=self.tool_result,
+            max_tokens=self.max_tokens if self.stage == Stage.input else None,
         )
 
     def with_content(self, content: Content) -> Check:

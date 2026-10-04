@@ -112,3 +112,45 @@ def test_invalid_adapter_response_fails_closed(make_firewall_app, bad_usage):
     )
     assert response.status_code == 502
     assert "Unverified" not in response.text
+
+
+@pytest.mark.parametrize("configured,extra,expected", [
+    ("none", {}, "none"),
+    ("default", {}, None),
+    ("none", {"reasoning_effort": "low"}, "low"),
+    ("none", {"reasoning": {"effort": "low"}}, None),
+])
+def test_ollama_tool_thinking_setting(
+    make_firewall_app, monkeypatch, configured, extra, expected,
+):
+    monkeypatch.setenv("OLLAMA_TOOL_REASONING_EFFORT", configured)
+    upstream = RecordingUpstream()
+    policy = BASE_POLICY.replace('base_url: "http://upstream.test/v1"',
+                                 'base_url: "http://upstream.test/v1"\n    provider: ollama')
+    response = TestClient(make_firewall_app(policy, upstream)).post(
+        "/v1/chat/completions", headers={"X-Agent-Key": AGENT_KEY}, json={
+            "model": "remote-model", "messages": [{"role": "user", "content": "List files"}],
+            "enable_tools": True, **extra,
+        },
+    )
+    assert response.status_code == 200
+    assert upstream.requests[0]["body"].get("reasoning_effort") == expected
+    if "reasoning" in extra:
+        assert upstream.requests[0]["body"]["reasoning"] == extra["reasoning"]
+
+
+def test_timeout_diagnostics_do_not_log_provider_content(make_firewall_app, caplog):
+    def fail(request):
+        raise httpx.ReadTimeout("private prompt and secret-key", request=request)
+    app = make_firewall_app(upstream_transport=httpx.MockTransport(fail))
+    response = TestClient(app).post(
+        "/v1/chat/completions", headers={"X-Agent-Key": AGENT_KEY}, json={
+            "model": "remote-model", "messages": [{"role": "user", "content": "Hi"}],
+        },
+    )
+    assert response.status_code == 502
+    assert "ReadTimeout" in caplog.text
+    assert "configured timeout 60s" in caplog.text
+    assert "check_id=" in caplog.text
+    assert "secret-key" not in caplog.text + response.text
+    assert "private prompt" not in caplog.text + response.text

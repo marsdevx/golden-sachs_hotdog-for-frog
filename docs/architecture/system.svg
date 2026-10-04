@@ -1,0 +1,241 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-16 -16 1272 672" width="1272" height="672" role="img" aria-label="Agents reach the firewall through four transports: OpenAI-compatible proxy, tool gateway, Gemini reverse proxy and check API. All four share identity checking, the Control pipeline and the Decision. Allowed calls go through provider adapters to Ollama, Anthropic, Google, or to demo file tools. policy.yaml and an external signature feed hot reload into the firewall. Every Check is written to Postgres, read by a separate console instance; model spans optionally go to Phoenix.">
+<title>Agents reach the firewall through four transports: OpenAI-compatible proxy, tool gateway, Gemini reverse proxy and check API. All four share identity checking, the Control pipeline and the Decision. Allowed calls go through provider adapters to Ollama, Anthropic, Google, or to demo file tools. policy.yaml and an external signature feed hot reload into the firewall. Every Check is written to Postgres, read by a separate console instance; model spans optionally go to Phoenix.</title>
+<style>
+:root {
+  --bg: #F6FBFB; --surface: #FFFFFF; --surface-2: #F1F3F3; --ink: #222222; --muted: #5E6566; --line: #CED2D3;
+  --accent: #00BABC; --accent-ink: #FFFFFF; --accent-text: #14295C; --fw-fill: #EFFAFA;
+  --block: #C2313A; --block-soft: #FBE5E6; --redact: #A86A12; --redact-soft: #FBEFD9;
+  --allow: #2C8251; --sem: #14295C; --sem-soft: #E7EBF4;
+  
+  
+  
+ --body: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #1A1A1A; --surface: #222222; --surface-2: #2C2E2F; --ink: #F2F4F4; --muted: #A5ABAC; --line: #43494A;
+  --accent: #00BABC; --accent-ink: #0F1A1A; --accent-text: #00BABC; --fw-fill: #1C2A2A;
+  --block: #F07A82; --block-soft: #3A1D22; --redact: #E2A84E; --redact-soft: #382B15;
+  --allow: #62C48E; --sem: #A9B8E6; --sem-soft: #14295C;   } }
+text { font-family: var(--body); fill: var(--ink); }
+.bg { fill: var(--surface); }
+.t { font-size: 13px; font-weight: 600; }
+.s { font-size: 11px; fill: var(--muted); }
+.m { font-family: var(--mono); font-size: 12px; font-weight: 500; }
+.lbl { font-size: 10.5px; fill: var(--muted); }
+.lm { font-family: var(--mono); }
+.cap { font-family: var(--mono); font-size: 9.5px; letter-spacing: .08em; fill: var(--muted); }
+.fw-label { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; fill: var(--accent-text); font-weight: 500; }
+.note-b { font-size: 10.5px; fill: var(--block); }
+.note-r { font-size: 10.5px; fill: var(--redact); }
+.box { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+.ext { fill: var(--surface-2); stroke: var(--line); stroke-width: 1.2; }
+.cfg { fill: var(--surface); stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 5 3; }
+.fw { fill: var(--fw-fill); stroke: var(--accent); stroke-width: 2; }
+.strong { fill: var(--surface); stroke: var(--accent); stroke-width: 1.6; }
+.band { fill: var(--surface-2); stroke: none; }
+.band-sem { fill: var(--sem-soft); stroke: var(--sem); stroke-width: 1; }
+.sem-t { fill: var(--sem); }
+.badge { fill: var(--accent); }
+.badge-t { fill: var(--accent-ink); font-family: var(--mono); font-size: 11px; font-weight: 500; }
+.blk { fill: var(--block-soft); stroke: var(--block); stroke-width: 1.4; }
+.red { fill: var(--redact-soft); stroke: var(--redact); stroke-width: 1.4; }
+.ln { stroke: var(--ink); stroke-width: 1.3; fill: none; }
+.ln-d { stroke: var(--muted); stroke-width: 1.3; fill: none; stroke-dasharray: 5 4; }
+.ln-a { stroke: var(--accent); stroke-width: 1.3; fill: none; }
+.life { stroke: var(--line); stroke-width: 1.2; stroke-dasharray: 3 4; }
+.life-a { stroke: var(--accent); stroke-width: 2; }
+.frag { fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 6 4; }
+.mk { fill: var(--ink); }
+.mk-m { fill: var(--muted); }
+.mk-a { fill: var(--accent); }
+</style>
+<rect class="bg" x="-16" y="-16" width="1272" height="672" rx="10"/>
+
+          <defs>
+            <marker id="f1-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk"/></marker>
+            <marker id="f1-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk-m"/></marker>
+          </defs>
+
+          <!-- Config row -->
+          <rect x="20" y="24" width="190" height="56" rx="8" class="ext"/>
+          <text x="115" y="48" text-anchor="middle" class="t">Policy owner</text>
+          <text x="115" y="65" text-anchor="middle" class="s">the employee running it</text>
+          <line x1="210" y1="52" x2="537" y2="52" class="ln-d" marker-end="url(#f1-m)"/>
+          <text x="384" y="45" text-anchor="middle" class="lbl">edits in any editor, saves</text>
+
+          <rect x="540" y="24" width="200" height="56" rx="8" class="cfg"/>
+          <text x="640" y="48" text-anchor="middle" class="m">policy.yaml</text>
+          <text x="640" y="65" text-anchor="middle" class="s">Controls, Agents, budgets</text>
+
+          <rect x="770" y="24" width="200" height="56" rx="8" class="cfg"/>
+          <text x="870" y="48" text-anchor="middle" class="m">signatures.yaml</text>
+          <text x="870" y="65" text-anchor="middle" class="s">attack feed, OWASP ASI codes</text>
+
+          <rect x="1030" y="24" width="190" height="56" rx="8" class="ext"/>
+          <text x="1125" y="48" text-anchor="middle" class="t">Security team / vendor</text>
+          <text x="1125" y="65" text-anchor="middle" class="s">file or https:// feed</text>
+          <line x1="1030" y1="52" x2="973" y2="52" class="ln-d" marker-end="url(#f1-m)"/>
+          <text x="1000" y="45" text-anchor="middle" class="lbl">publishes</text>
+
+          <line x1="640" y1="80" x2="640" y2="147" class="ln-d" marker-end="url(#f1-m)"/>
+          <text x="648" y="122" class="lbl">hot reload on save</text>
+          <line x1="870" y1="80" x2="870" y2="107" class="ln-d" marker-end="url(#f1-m)"/>
+          <text x="878" y="100" class="lbl">mtime / ETag reload</text>
+
+          <!-- Firewall frame -->
+          <rect x="280" y="110" width="700" height="410" rx="12" class="fw"/>
+          <text x="298" y="133" class="fw-label">FIREWALL · AGENT-FACING INSTANCE · :8001</text>
+
+          <!-- Callers -->
+          <rect x="20" y="150" width="190" height="56" rx="8" class="ext"/>
+          <text x="115" y="174" text-anchor="middle" class="t">Any OpenAI-SDK agent</text>
+          <text x="115" y="191" text-anchor="middle" class="s">changes only base_url</text>
+
+          <rect x="20" y="230" width="190" height="56" rx="8" class="ext"/>
+          <text x="115" y="254" text-anchor="middle" class="t">Demo chat agent</text>
+          <text x="115" y="271" text-anchor="middle" class="s">LangGraph, via nginx :8000</text>
+
+          <rect x="20" y="310" width="190" height="56" rx="8" class="ext"/>
+          <text x="115" y="334" text-anchor="middle" class="t">Gemini CLI</text>
+          <text x="115" y="351" text-anchor="middle" class="s">GOOGLE_GEMINI_BASE_URL</text>
+
+          <rect x="20" y="390" width="190" height="56" rx="8" class="ext"/>
+          <text x="115" y="414" text-anchor="middle" class="t">Custom agent</text>
+          <text x="115" y="431" text-anchor="middle" class="s">asks before each step</text>
+
+          <!-- Caller → transport -->
+          <line x1="210" y1="178" x2="297" y2="178" class="ln" marker-end="url(#f1-a)"/>
+          <text x="245" y="171" text-anchor="middle" class="lbl">Bearer key</text>
+          <line x1="210" y1="244" x2="297" y2="196" class="ln" marker-end="url(#f1-a)"/>
+          <line x1="210" y1="258" x2="297" y2="258" class="ln" marker-end="url(#f1-a)"/>
+          <text x="245" y="273" text-anchor="middle" class="lbl">tool calls</text>
+          <line x1="210" y1="338" x2="297" y2="338" class="ln" marker-end="url(#f1-a)"/>
+          <text x="245" y="331" text-anchor="middle" class="lbl">+ agent key</text>
+          <line x1="210" y1="418" x2="297" y2="418" class="ln" marker-end="url(#f1-a)"/>
+          <text x="245" y="411" text-anchor="middle" class="lbl">X-Agent-Key</text>
+
+          <!-- Transports -->
+          <rect x="300" y="150" width="200" height="56" rx="8" class="box"/>
+          <text x="400" y="174" text-anchor="middle" class="m">/v1/chat/completions</text>
+          <text x="400" y="191" text-anchor="middle" class="s">OpenAI-compatible proxy</text>
+
+          <rect x="300" y="230" width="200" height="56" rx="8" class="box"/>
+          <text x="400" y="254" text-anchor="middle" class="m">/v1/tools/execute</text>
+          <text x="400" y="271" text-anchor="middle" class="s">checked tool gateway</text>
+
+          <rect x="300" y="310" width="200" height="56" rx="8" class="box"/>
+          <text x="400" y="334" text-anchor="middle" class="m">/gemini/*</text>
+          <text x="400" y="351" text-anchor="middle" class="s">Gemini CLI reverse proxy</text>
+
+          <rect x="300" y="390" width="200" height="56" rx="8" class="box"/>
+          <text x="400" y="414" text-anchor="middle" class="m">/v1/check/{stage}</text>
+          <text x="400" y="431" text-anchor="middle" class="s">check API, 4 Stages</text>
+
+          <!-- Bus into identity -->
+          <path d="M500,178 H520 M500,258 H520 M500,338 H520 M500,418 H520 M520,418 V178" class="ln"/>
+          <line x1="520" y1="178" x2="537" y2="178" class="ln" marker-end="url(#f1-a)"/>
+
+          <!-- Core column -->
+          <rect x="540" y="150" width="200" height="56" rx="8" class="box"/>
+          <text x="640" y="174" text-anchor="middle" class="t">Identity + model check</text>
+          <text x="640" y="191" text-anchor="middle" class="s">unknown key or model → block</text>
+          <line x1="640" y1="206" x2="640" y2="227" class="ln" marker-end="url(#f1-a)"/>
+
+          <rect x="540" y="230" width="200" height="180" rx="8" class="strong"/>
+          <text x="640" y="252" text-anchor="middle" class="t">Check pipeline</text>
+          <text x="640" y="268" text-anchor="middle" class="s">Controls in Policy order</text>
+          <rect x="552" y="278" width="176" height="82" rx="5" class="band"/>
+          <text x="562" y="294" class="cap">DETERMINISTIC · 9</text>
+          <text x="562" y="309" class="lbl">loop · limits · token budget</text>
+          <text x="562" y="323" class="lbl">keywords · attack signatures</text>
+          <text x="562" y="337" class="lbl">sensitive data · inj. patterns</text>
+          <text x="562" y="351" class="lbl">folder access · link filter</text>
+          <rect x="552" y="366" width="176" height="36" rx="5" class="band-sem"/>
+          <text x="562" y="381" class="cap sem-t">SEMANTIC · 1</text>
+          <text x="562" y="395" class="lbl">local DeBERTa model (ONNX)</text>
+          <line x1="640" y1="410" x2="640" y2="427" class="ln" marker-end="url(#f1-a)"/>
+
+          <rect x="540" y="430" width="200" height="56" rx="8" class="box"/>
+          <text x="640" y="454" text-anchor="middle" class="t">Decision + reason</text>
+          <text x="640" y="471" text-anchor="middle" class="s">block › review › redact › allow</text>
+
+          <!-- Decision back to caller -->
+          <path d="M540,474 H400 V449" class="ln" marker-end="url(#f1-a)"/>
+          <text x="470" y="494" text-anchor="middle" class="lbl">verdict or checked content</text>
+
+          <!-- Decision → forward -->
+          <path d="M740,458 H760 V190 M760,288 H777 M760,368 H777" class="ln"/>
+          <line x1="760" y1="190" x2="777" y2="190" class="ln" marker-end="url(#f1-a)"/>
+          <line x1="760" y1="288" x2="777" y2="288" class="ln" marker-end="url(#f1-a)"/>
+          <line x1="760" y1="368" x2="777" y2="368" class="ln" marker-end="url(#f1-a)"/>
+          <text x="770" y="462" class="lbl">allow / redact → forward</text>
+          <text x="770" y="476" class="lbl">block → never leaves</text>
+
+          <!-- Right column inside firewall -->
+          <rect x="780" y="140" width="180" height="100" rx="8" class="box"/>
+          <text x="870" y="163" text-anchor="middle" class="t">Provider adapters</text>
+          <text x="870" y="182" text-anchor="middle" class="s">ollama · anthropic</text>
+          <text x="870" y="198" text-anchor="middle" class="s">openai_compatible · mock</text>
+          <text x="870" y="220" text-anchor="middle" class="s">usage → token budget</text>
+
+          <rect x="780" y="260" width="180" height="56" rx="8" class="box"/>
+          <text x="870" y="284" text-anchor="middle" class="t">Google forwarder</text>
+          <text x="870" y="301" text-anchor="middle" class="s">CLI credentials pass through</text>
+
+          <rect x="780" y="340" width="180" height="56" rx="8" class="box"/>
+          <text x="870" y="364" text-anchor="middle" class="t">Demo file tools</text>
+          <text x="870" y="381" text-anchor="middle" class="s">list · read · sandbox delete</text>
+
+          <!-- Upstreams -->
+          <rect x="1030" y="140" width="190" height="44" rx="8" class="ext"/>
+          <text x="1125" y="159" text-anchor="middle" class="t">Ollama · local</text>
+          <text x="1125" y="175" text-anchor="middle" class="s">qwen3:4b, qwen3:1.7b</text>
+          <rect x="1030" y="196" width="190" height="44" rx="8" class="ext"/>
+          <text x="1125" y="215" text-anchor="middle" class="t">Anthropic API</text>
+          <text x="1125" y="231" text-anchor="middle" class="s">key held by firewall only</text>
+          <rect x="1030" y="260" width="190" height="56" rx="8" class="ext"/>
+          <text x="1125" y="284" text-anchor="middle" class="t">Google Gemini</text>
+          <text x="1125" y="301" text-anchor="middle" class="s">API or Code Assist</text>
+          <rect x="1030" y="340" width="190" height="56" rx="8" class="ext"/>
+          <text x="1125" y="364" text-anchor="middle" class="t">demo_data/ on disk</text>
+          <text x="1125" y="381" text-anchor="middle" class="s">no symlinks, ≤ 32 KiB</text>
+
+          <line x1="960" y1="162" x2="1027" y2="162" class="ln" marker-end="url(#f1-a)"/>
+          <text x="994" y="155" text-anchor="middle" class="lbl">/v1 API</text>
+          <line x1="960" y1="218" x2="1027" y2="218" class="ln" marker-end="url(#f1-a)"/>
+          <text x="994" y="211" text-anchor="middle" class="lbl">Messages</text>
+          <line x1="960" y1="288" x2="1027" y2="288" class="ln" marker-end="url(#f1-a)"/>
+          <text x="994" y="281" text-anchor="middle" class="lbl">forwards</text>
+          <line x1="960" y1="368" x2="1027" y2="368" class="ln" marker-end="url(#f1-a)"/>
+          <text x="994" y="361" text-anchor="middle" class="lbl">reads</text>
+
+          <!-- Bottom: storage, console, telemetry -->
+          <line x1="640" y1="486" x2="640" y2="553" class="ln" marker-end="url(#f1-a)"/>
+          <text x="648" y="540" class="lbl">1 Audit Event per Check</text>
+
+          <rect x="520" y="556" width="240" height="72" rx="8" class="box"/>
+          <text x="640" y="578" text-anchor="middle" class="t">Postgres <tspan class="s" font-weight="400">(SQLite in tests)</tspan></text>
+          <text x="640" y="596" text-anchor="middle" class="s">audit_events · budget_days · budget_runs</text>
+          <text x="640" y="612" text-anchor="middle" class="s">loop_observations · circuit_breakers</text>
+
+          <line x1="760" y1="592" x2="797" y2="592" class="ln" marker-end="url(#f1-a)"/>
+          <text x="779" y="585" text-anchor="middle" class="lbl">reads</text>
+
+          <rect x="800" y="556" width="160" height="72" rx="8" class="strong"/>
+          <text x="880" y="578" text-anchor="middle" class="t">firewall-console</text>
+          <text x="880" y="596" text-anchor="middle" class="m" font-size="11">127.0.0.1:8001</text>
+          <text x="880" y="612" text-anchor="middle" class="s">/console · CSV/JSONL</text>
+
+          <path d="M970,520 V592 H1027" class="ln-d" marker-end="url(#f1-m)"/>
+          <text x="1000" y="585" text-anchor="middle" class="lbl">OTLP</text>
+          <rect x="1030" y="556" width="190" height="72" rx="8" class="ext"/>
+          <text x="1125" y="578" text-anchor="middle" class="t">Phoenix (optional)</text>
+          <text x="1125" y="596" text-anchor="middle" class="s">model-call spans, tokens</text>
+          <text x="1125" y="612" text-anchor="middle" class="s">no prompt text exported</text>
+
+          <!-- Legend -->
+          <line x1="20" y1="572" x2="60" y2="572" class="ln" marker-end="url(#f1-a)"/>
+          <text x="70" y="576" class="lbl">request and data path</text>
+          <line x1="20" y1="598" x2="60" y2="598" class="ln-d" marker-end="url(#f1-m)"/>
+          <text x="70" y="602" class="lbl">config, feed, telemetry</text>
+        
+</svg>

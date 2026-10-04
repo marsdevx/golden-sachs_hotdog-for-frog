@@ -1,0 +1,1 @@
+Scratch file for the delete demo. Restore it with: git checkout firewall/firewall_app/demo_data/sandbox

@@ -1,0 +1,64 @@
+# Preset STRICT: for desks handling inside information. Tighter limits and budgets, Sensitive
+# Data is also checked in what users type and secrets stop the reply, a document with an
+# Injection is refused whole, and a broken Injection model fails closed.
+# Laid over `controls:` of policy.yaml when it says `preset: strict`. Only differences here.
+
+controls:
+  loop_detector:
+    mode: block
+    params:
+      max_calls: 20
+      max_similar: 3
+      breaker_cooldown_seconds: 900  # a looping Agent is stopped for 15 minutes
+
+  request_limits:
+    mode: block
+    params:
+      max_messages: 50
+      max_prompt_tokens: 4000
+      max_completion_tokens: 1024
+      require_max_tokens: true       # a request without max_tokens gets the ceiling
+      max_tool_args_tokens: 2000
+      max_tool_result_tokens: 4000
+
+  token_budget:
+    mode: block
+    params:
+      default: {tokens_per_day: 50000, warn_at: 0.7}
+      per_user: {tokens_per_day: 10000, warn_at: 0.7}
+      per_run: {requests: 10, tool_calls: 15, tokens: 20000, wall_clock_seconds: 180,
+                idle_seconds: 300, warn_at: 0.7}
+
+  keyword_blocklist:
+    mode: block
+    params:
+      keywords: ["project falcon", "project osprey", "insider list", "material non-public"]
+
+  attack_signatures:
+    mode: block
+
+  sensitive_data:
+    mode: block                      # categories with on_match: block stop the reply
+    stages: [input, output, tool_result]   # prompts too: nothing sensitive reaches the model
+    params:
+      level: secrets
+
+  injection_heuristics:
+    mode: block
+    params:
+      on_indirect: block             # a poisoned document is refused whole
+
+  resource_access:
+    mode: block
+
+  injection_classifier:
+    mode: block
+    on_error: block                  # model missing: fail closed
+    params:
+      threshold: 0.8
+      on_indirect: block
+
+  output_sanitizer:
+    mode: redact
+    params:
+      allowed_domains: []            # no link or image leaves the reply

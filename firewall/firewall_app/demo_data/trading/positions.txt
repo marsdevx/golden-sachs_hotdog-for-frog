@@ -1,0 +1,6 @@
+CEE EQUITIES DESK - open positions (synthetic demo data)
+Owner: bob@bank.example
+
+VSTL  Vistula Logistics   long   120,000 @ 36.10 PLN
+PKN   Orlen               short   40,000 @ 71.25 PLN
+CDR   CD Projekt          long    15,000 @ 182.40 PLN

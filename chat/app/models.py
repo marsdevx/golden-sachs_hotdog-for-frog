@@ -5,9 +5,24 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
+class FunctionCall(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    arguments: str = Field(max_length=32768)
+
+
+class ModelToolCall(BaseModel):
+    id: str = Field(min_length=1, max_length=128)
+    type: Literal["function"] = "function"
+    function: FunctionCall
+
+
 class Message(BaseModel):
     role: Literal["system", "user", "assistant", "tool"]
     content: str
+    tool_calls: list[ModelToolCall] | None = Field(
+        default=None, max_length=8, exclude_if=lambda v: v is None,
+    )
+    tool_call_id: str | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class ToolCall(BaseModel):
@@ -42,6 +57,8 @@ class ControlDecision(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    run_id: str | None = None
+    steps: list[dict[str, Any]] = Field(default_factory=list)
     request_id: str
     message: Message
     model: str

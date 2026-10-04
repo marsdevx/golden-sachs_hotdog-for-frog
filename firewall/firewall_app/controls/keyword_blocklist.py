@@ -13,6 +13,7 @@ from firewall_app.domain import Action, Check, Content, Finding, Message, Stage,
 @control("keyword_blocklist")
 class KeywordBlocklist(Control):
     stages = {Stage.input, Stage.output}
+    feature = "input_validation"
     description = "Blocks messages containing forbidden phrases."
 
     class Params(BaseModel):

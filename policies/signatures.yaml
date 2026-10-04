@@ -1,0 +1,277 @@
+# =====================================================================
+# Attack signature feed for the attack_signatures Control
+#
+# Patterns of exploits that have worked against AI systems before. The feed
+# is managed outside the Policy (a security team, a vendor feed, a URL) and
+# hot reloaded: save this file and the next Check uses it, no restart. A
+# broken feed (bad YAML, bad regex, duplicate id) is rejected and the last
+# good feed stays in force.
+#
+# Each signature:
+#   id           stable id, cited in every Finding and Audit Event
+#   category     deserialization | code_exec | supply_chain | destructive | prompt_injection
+#                (any lowercase name works; the Policy can enable a subset)
+#   asi          OWASP Top 10 for Agentic Applications (Dec 2025) code, ASI01..ASI10
+#   stages       where it runs: input | tool_call | tool_result
+#                tool_call scans "resource.action" plus every argument as path=value lines
+#   action       block | review (review = a human must approve; the Agent must wait)
+#   severity     0..1, the risk_score of the Verdict
+#   pattern      Python regex in single quotes. A catastrophic pattern like (a+)+$ can stall
+#                a Check: test it before publishing.
+#   reference    the historical incident or attack class it comes from. Never cite a CVE
+#                number here without checking it.
+# =====================================================================
+
+version: "2026-10-04"
+
+signatures:
+  # --- unsafe deserialization: a model or data file that runs code when loaded --------
+  - id: DESER-PICKLE-REDUCE
+    category: deserialization
+    asi: ASI05
+    stages: [tool_call, tool_result]
+    severity: 0.9
+    pattern: '__reduce(?:_ex)?__'
+    description: "Python object defining __reduce__: the classic pickle code-execution gadget"
+    reference: "Malicious pickled models on public model hubs (2023-2025)"
+
+  - id: DESER-PICKLE-GLOBAL
+    category: deserialization
+    asi: ASI05
+    stages: [tool_call, tool_result]
+    severity: 1.0
+    # Protocol 0-3 (c<module>\n<name>) and protocol 4-5 (SHORT_BINUNICODE ... STACK_GLOBAL)
+    pattern: '(?:^|[\x80\x02\x03(])c(?:os|posix|nt|subprocess|builtins|__builtin__|runpy|socket)\n(?:system|popen|exec|eval|getattr|Popen|call|check_output|run_path|_run_code|socket)\b|\x8c.(?:os|posix|nt|subprocess|builtins|runpy)\x94\x8c.(?:system|popen|exec|eval|Popen|call|check_output|run_path)\x94'
+    description: "Pickle stream importing a command-execution function"
+    reference: "Pickle payloads in .pt/.pkl/.bin model files"
+
+  - id: DESER-PICKLE-BASE64
+    category: deserialization
+    asi: ASI05
+    stages: [tool_call, tool_result]
+    severity: 0.8
+    pattern: '\b(?:gA[SW]V|gA[JN]j|Y3Bvc2l4CnN5c3Rlb|Y29zCnN5c3Rlb)[A-Za-z0-9+/]{16,}={0,2}'
+    description: "Base64-encoded pickle stream (protocol 2-5, or protocol 0 importing os.system)"
+    reference: "Pickles smuggled through JSON tool arguments and API responses"
+
+  - id: DESER-UNSAFE-LOADER
+    category: deserialization
+    asi: ASI04
+    stages: [tool_call]
+    action: review
+    severity: 0.7
+    pattern: '\btorch\.load\s*\((?![^)]*weights_only\s*=\s*True)|\b(?:c?pickle|dill|cloudpickle|joblib|marshal|shelve)\.loads?\s*\(|\bnumpy\.load\s*\([^)]*allow_pickle\s*=\s*True|\byaml\.(?:unsafe_load|load)\s*\((?![^)]*Loader\s*=\s*(?:yaml\.)?(?:Safe|CSafe)Loader)'
+    description: "Code loads a model or data file with a deserializer that can run code"
+    reference: "torch.load / pickle.load on untrusted model checkpoints"
+
+  - id: DESER-YAML-PYTHON-TAG
+    category: deserialization
+    asi: ASI05
+    stages: [tool_call, tool_result]
+    severity: 1.0
+    pattern: '!!python/(?:object|name|module)(?:/apply|/new)?:'
+    description: "YAML document with a python/object tag (runs code under yaml.load)"
+    reference: "PyYAML full_load/unsafe_load gadget chains"
+
+  - id: DESER-JAVA-SERIAL
+    category: deserialization
+    asi: ASI05
+    stages: [tool_call, tool_result]
+    severity: 0.8
+    pattern: '\brO0AB[A-Za-z0-9+/]{8,}|\baced0005[0-9a-f]{8,}'
+    description: "Java serialized object (base64 or hex), the input of ysoserial-style gadget chains"
+    reference: "Java deserialization in ML serving and data platforms"
+
+  # --- code execution: tool arguments that make an Agent run attacker code ------------
+  - id: EXEC-PY-DYNAMIC
+    category: code_exec
+    asi: ASI05
+    stages: [tool_call]
+    severity: 0.9
+    pattern: '\b(?:eval|exec|compile)\s*\(|__import__\s*\(\s*[''"](?:os|subprocess|socket|pty)[''"]|\bimportlib\.import_module\s*\(\s*[''"](?:os|subprocess)'
+    description: "Dynamic Python evaluation in a tool argument"
+    reference: "LLM-generated code executed by Agents with a code tool"
+
+  - id: EXEC-OS-COMMAND
+    category: code_exec
+    asi: ASI05
+    stages: [tool_call]
+    severity: 0.9
+    pattern: '\bos\.(?:system|popen|exec[lv]p?e?|spawn[lv]p?e?)\s*\(|\bsubprocess\.(?:run|call|Popen|check_output|check_call|getoutput)\s*\(|\bpty\.spawn\s*\(|\bRuntime\.getRuntime\(\)\.exec\b|\bchild_process\b'
+    description: "Operating-system command execution from code passed to a tool"
+    reference: "Code-interpreter and notebook tool escapes"
+
+  - id: EXEC-SHELL-INJECTION
+    category: code_exec
+    asi: ASI02
+    stages: [tool_call]
+    severity: 0.9
+    pattern: '(?:;|&&|\|\||\|)\s*(?:sudo\s+)?(?:rm|curl|wget|nc|ncat|bash|sh|zsh|python\d?|perl|ruby|chmod|chown|scp|base64)\b|\$\([^)]{1,200}\)'
+    description: "Shell metacharacters chaining a second command into a tool argument"
+    reference: "MCP servers Jan-Feb 2026: 30+ CVEs in 60 days, 43% shell-injection class"
+
+  - id: EXEC-DOWNLOAD-PIPE-SHELL
+    category: code_exec
+    asi: ASI05
+    stages: [tool_call]
+    severity: 1.0
+    pattern: '\b(?:curl|wget|iwr|Invoke-WebRequest)\b[^\n|]{0,300}\|\s*(?:sudo\s+)?(?:ba|z|da)?sh\b|\b(?:iex|Invoke-Expression)\b'
+    description: "Download-and-execute: a remote script piped straight into a shell"
+    reference: "Install-script and README-driven Agent compromises"
+
+  - id: EXEC-REVERSE-SHELL
+    category: code_exec
+    asi: ASI05
+    stages: [tool_call, tool_result]
+    severity: 1.0
+    pattern: '/dev/tcp/\S+/\d+|\bn(?:c|cat)\b[^\n]{0,80}\s-[ec]\s|\bbash\s+-i\b|\bmkfifo\b[^\n]{0,80}\bnc\b|\bsocat\b[^\n]{0,80}\bexec:'
+    description: "Reverse shell: gives an outside attacker a live shell on this machine"
+    reference: "Post-exploitation on exposed AI infrastructure (e.g. unauthenticated Ray clusters, 2024)"
+
+  - id: EXEC-LOG4SHELL-JNDI
+    category: code_exec
+    asi: ASI05
+    stages: [input, tool_call, tool_result]
+    severity: 1.0
+    pattern: '(?i)\$\{\s*(?:jndi|\$\{[^}]{0,20}\}j[^}]{0,20}ndi)[^}]{0,20}:'
+    description: "JNDI lookup string (Log4Shell) that runs code in a vulnerable Java logger"
+    reference: "Log4Shell, CVE-2021-44228: still sprayed at any text field that might be logged"
+
+  - id: EXEC-TEMPLATE-INJECTION
+    category: code_exec
+    asi: ASI05
+    stages: [input, tool_call, tool_result]
+    severity: 0.9
+    pattern: '\{\{[^}]{0,200}__(?:class|globals|builtins|subclasses|mro|init)__'
+    description: "Server-side template injection reaching Python internals"
+    reference: "Jinja2 SSTI in prompt templates and LLM app frameworks"
+
+  # --- supply chain: models, packages and tool servers from untrusted sources ---------
+  - id: SUPPLY-TRUST-REMOTE-CODE
+    category: supply_chain
+    asi: ASI04
+    stages: [tool_call]
+    action: review
+    severity: 0.8
+    pattern: '\btrust_remote_code\s*[=:]\s*True\b'
+    description: "Loading a hub model with trust_remote_code: runs the repository's own Python"
+    reference: "Malicious model repositories on public hubs"
+
+  - id: SUPPLY-PICKLED-MODEL-DOWNLOAD
+    category: supply_chain
+    asi: ASI04
+    stages: [tool_call]
+    action: review
+    severity: 0.7
+    pattern: '(?i)https?://(?:huggingface\.co|hf\.co|[\w.-]*modelscope\.cn|civitai\.com)/\S+\.(?:bin|pt|pth|pkl|pickle|ckpt|joblib)\b'
+    description: "Downloading a pickle-format model file instead of safetensors"
+    reference: "Malicious .bin/.pt checkpoints on model hubs (2023-2025)"
+
+  - id: SUPPLY-UNPINNED-INSTALL
+    category: supply_chain
+    asi: ASI04
+    stages: [tool_call]
+    action: review
+    severity: 0.7
+    pattern: '\b(?:pip3?|uv\s+pip|poetry)\s+(?:install|add)\b[^\n]{0,200}(?:git\+|https?://|--index-url|--extra-index-url|--trusted-host)|\b(?:npm|pnpm|yarn)\s+(?:install|add|i)\b[^\n]{0,200}(?:https?://|git\+|github:)'
+    description: "Installing a package from a URL, git or an extra index (dependency confusion)"
+    reference: "Dependency-confusion and typosquatting attacks on ML packages"
+
+  - id: SUPPLY-MCP-RUNTIME-INSTALL
+    category: supply_chain
+    asi: ASI04
+    stages: [tool_call]
+    action: review
+    severity: 0.8
+    pattern: '\b(?:npx|uvx|pipx\s+run|bunx)\s+(?:-y\s+|--yes\s+)?\S*mcp\S*'
+    description: "An Agent fetching and starting an MCP server at runtime, unpinned and unreviewed"
+    reference: "Postmark MCP impersonation (2025): first malicious MCP server in the wild"
+
+  - id: SUPPLY-MAIL-HIDDEN-RECIPIENT
+    category: supply_chain
+    asi: ASI04
+    stages: [tool_call]
+    action: review
+    severity: 0.9
+    pattern: '(?im)^(?:[\w\[\]-]+\.)*(?:bcc|blind_copy|blindcopy)=\S'
+    description: "Email tool call with a BCC recipient: the pattern of a backdoored mail tool"
+    reference: "Postmark MCP impersonation (2025): BCC'd every email to the attacker"
+
+  # --- destructive operations: the freeze must live in the execution path -------------
+  - id: DESTR-SQL-DROP
+    category: destructive
+    asi: ASI02
+    stages: [tool_call]
+    action: review
+    severity: 0.9
+    pattern: '(?i)\b(?:drop\s+(?:database|schema|table)|truncate\s+(?:table\s+)?\w)'
+    description: "Dropping or truncating a database, schema or table"
+    reference: "Jul 2025: an AI coding agent deleted a live production database during a code freeze"
+
+  - id: DESTR-SQL-UNSCOPED-DELETE
+    category: destructive
+    asi: ASI02
+    stages: [tool_call]
+    action: review
+    severity: 0.8
+    pattern: '(?im)\bdelete\s+from\s+[\w."`\[\]]+\s*(?:;|$)|\bupdate\s+[\w."`\[\]]+\s+set\s+(?:(?!\bwhere\b)[^;\n]){1,300}(?:;|$)'
+    description: "DELETE or UPDATE without a WHERE clause: touches every row"
+    reference: "Jul 2025 production database deletion"
+
+  - id: DESTR-FILESYSTEM-WIPE
+    category: destructive
+    asi: ASI02
+    stages: [tool_call]
+    action: review
+    severity: 0.9
+    pattern: '\brm\s+(?:-[a-zA-Z]*[rR][a-zA-Z]*\s+)+|\bRemove-Item\b[^\n]{0,100}-Recurse|\bshred\b|\bmkfs(?:\.\w+)?\b|\bdd\s+[^\n]{0,80}of=/dev/'
+    description: "Recursive delete or disk wipe"
+    reference: "Agents deleting home directories and repositories"
+
+  - id: DESTR-INFRA-TEARDOWN
+    category: destructive
+    asi: ASI02
+    stages: [tool_call]
+    action: review
+    severity: 0.9
+    pattern: '\bterraform\s+(?:destroy|apply\s+[^\n]*-destroy)|\bkubectl\s+delete\s+(?:ns|namespace|deployment|statefulset|pvc|pv)\b|\bdropdb\b|\bgit\s+push\s+[^\n]*(?:--force\b|-f\b)|\bgit\s+reset\s+--hard\b|\baws\s+s3\s+rb\b|\baws\s+s3\s+rm\b[^\n]*--recursive'
+    description: "Tearing down infrastructure or rewriting shared history"
+    reference: "Jul 2025 production database deletion"
+
+  # --- prompt injection carried by data the Agent reads (indirect) --------------------
+  - id: INJ-IGNORE-INSTRUCTIONS
+    category: prompt_injection
+    asi: ASI01
+    stages: [input, tool_result]
+    severity: 0.8
+    pattern: '(?i)\b(?:ignore|disregard|forget|override)\s+(?:all\s+|any\s+|the\s+|your\s+)*(?:previous|prior|above|earlier|system|original)\s+(?:instructions|prompts?|rules|guidelines|directions)'
+    description: "Instruction-override phrase, the most common goal-hijack opener"
+    reference: "Indirect prompt injection in documents, issues and web pages"
+
+  - id: INJ-KNOWN-JAILBREAK
+    category: prompt_injection
+    asi: ASI01
+    stages: [input, tool_result]
+    severity: 0.8
+    pattern: '(?i)\bdo\s+anything\s+now\b|\b(?:developer|god|jailbreak)\s+mode\s+(?:enabled|activated|on)\b|\byou\s+are\s+(?:now\s+)?(?:DAN|STAN|DUDE|AIM)\b'
+    description: "Well-known published jailbreak persona"
+    reference: "DAN-family jailbreak prompts (2023-2025)"
+
+  - id: INJ-HIDDEN-DIRECTIVE
+    category: prompt_injection
+    asi: ASI01
+    stages: [tool_result]
+    severity: 0.9
+    pattern: '(?i)<\s*/?\s*(?:important|system|admin|instructions?|secret)\s*>|\[\s*(?:system|admin)\s*(?:note|message|override)\s*\]'
+    description: "Fake system or IMPORTANT tags inside data returned by a Resource"
+    reference: "MCP tool-description poisoning (2025)"
+
+  - id: INJ-EXFIL-INSTRUCTION
+    category: prompt_injection
+    asi: ASI01
+    stages: [tool_result]
+    action: review
+    severity: 0.9
+    pattern: '(?i)\b(?:send|forward|post|upload|email|copy|push|publish|leak)\b[^.\n]{0,80}\b(?:private\s+repo\w*|all\s+(?:files|repos\w*|emails|messages|documents)|credentials?|api\s+keys?|tokens?|passwords?|secrets?)\b[^.\n]{0,80}\b(?:to|into)\b'
+    description: "Data read by the Agent tells it to move private data somewhere"
+    reference: "GitHub MCP toxic agent flow (2025): a public issue made an Agent leak private repos"

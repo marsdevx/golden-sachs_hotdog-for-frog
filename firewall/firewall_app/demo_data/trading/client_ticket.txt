@@ -1,0 +1,7 @@
+Client order ticket (synthetic demo data)
+
+Client: Marta Zielinska, marta.zielinska@example.com, +48 602 333 444
+Settlement card: 4111 1111 1111 1111
+Settlement account: PL61 1090 1014 0000 0712 1981 2874
+Broker API key: sk-ant-demo1234567890abcdefghijklmn
+Order: buy 5,000 VSTL at market

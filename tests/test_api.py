@@ -13,6 +13,18 @@ def test_health(chat_app) -> None:
     assert response.json() == {"status": "ok"}
 
 
+def test_user_chat_page_and_assets(chat_app) -> None:
+    client = TestClient(chat_app)
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert 'id="composer"' in response.text
+    for path, content_type in (("/static/chat.js", "javascript"), ("/static/chat.css", "css")):
+        asset = client.get(path)
+        assert asset.status_code == 200
+        assert content_type in asset.headers["content-type"]
+
+
 def test_mock_llm_health(chat_app) -> None:
     response = TestClient(chat_app).get("/health/llm")
     assert response.status_code == 200
@@ -113,7 +125,9 @@ async def test_chat_proxy_preserves_context_and_usage(make_chat_app, firewall_ap
     }
     events = await firewall_app.state.audit.query()
     assert len(events) == 2  # no duplicate check-API calls around the proxy
-    assert all(e.transport == "proxy" and e.metadata == metadata for e in events)
+    assert all(e.transport == "proxy" and
+               all(e.metadata[key] == value for key, value in metadata.items()) for e in events)
+    assert {e.metadata["session_id"] for e in events} == {response.json()["run_id"]}
     assert "metadata" not in upstream.requests[0]["body"]
 
 

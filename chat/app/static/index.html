@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Chat</title>
+  <link rel="stylesheet" href="/static/chat.css">
+  <script src="/static/chat.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <a class="brand" href="/" data-i18n-aria="home" aria-label="AI Chat — home"><span class="logo">✳</span> AI Chat</a>
+      <div class="header-actions">
+        <label class="sr-only" for="language" data-i18n="language">Language</label>
+        <select id="language" class="secondary">
+          <option value="en" lang="en">English</option>
+          <option value="pl" lang="pl">Polski</option>
+        </select>
+        <button id="reset" class="secondary" type="button" data-i18n="newChat">New chat</button>
+      </div>
+    </header>
+    <main>
+      <section id="welcome">
+        <span class="eyebrow" data-i18n="eyebrow">YOUR AI ASSISTANT</span>
+        <h1 data-i18n="heading">What can I help with?</h1>
+        <p data-i18n="intro">Ask a question, describe a task, or explore an idea.</p>
+        <div class="suggestions">
+          <button type="button" data-prompt-key="planPrompt"><span class="suggestion-label" data-i18n="plan">Make a plan</span> <span aria-hidden="true">↗</span></button>
+          <button type="button" data-prompt-key="topicPrompt"><span class="suggestion-label" data-i18n="topic">Explore a topic</span> <span aria-hidden="true">↗</span></button>
+          <button type="button" data-prompt-key="draftPrompt"><span class="suggestion-label" data-i18n="draft">Draft a message</span> <span aria-hidden="true">↗</span></button>
+        </div>
+      </section>
+      <section id="messages" role="log" data-i18n-aria="conversation" aria-label="Conversation" aria-live="polite"></section>
+    </main>
+    <footer>
+      <p id="last-run" class="hint"></p>
+      <p id="status" role="status"></p>
+      <form id="composer">
+        <label class="sr-only" for="prompt" data-i18n="message">Message</label>
+        <textarea id="prompt" rows="2" data-i18n-placeholder="placeholder" placeholder="Type a message…" required></textarea>
+        <button id="send" type="submit" data-i18n-aria="send" aria-label="Send message">↑</button>
+      </form>
+      <p class="hint" data-i18n="hint">Enter to send · Shift + Enter for a new line</p>
+    </footer>
+  </div>
+</body>
+</html>

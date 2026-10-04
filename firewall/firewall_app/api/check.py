@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from firewall_app.domain import Check, Decision, Message, Stage, ToolCall, Transport, Usage
 from firewall_app.identity import resolve_agent
 from firewall_app.pipeline import PipelineResult
+from firewall_app.runs import run_id_of
 
 router = APIRouter(tags=["check"])
 
@@ -22,7 +23,7 @@ REQUIRED: dict[Stage, set[str]] = {
     Stage.tool_call: {"tool"},
     Stage.tool_result: {"tool", "tool_result"},
 }
-OPTIONAL: dict[Stage, set[str]] = {Stage.output: {"usage"}}
+OPTIONAL: dict[Stage, set[str]] = {Stage.input: {"max_tokens"}, Stage.output: {"usage"}}
 ALWAYS_ALLOWED = {"user", "metadata"}
 
 
@@ -33,6 +34,7 @@ class CheckRequest(BaseModel):
     message: Message | None = None
     tool: ToolCall | None = None
     tool_result: str | None = None
+    max_tokens: int | None = Field(default=None, ge=1)
     user: str | None = None
     usage: Usage | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -48,6 +50,7 @@ class CheckResponse(BaseModel):
     message: Message | None = None
     tool: ToolCall | None = None
     tool_result: str | None = None
+    max_tokens: int | None = None  # input only, when sent or set by a Control
 
 
 def validate_for_stage(stage: Stage, body: CheckRequest) -> None:
@@ -69,8 +72,10 @@ def _error(field: str, message: str, kind: str) -> dict[str, Any]:
 
 
 def check_response(result: PipelineResult) -> dict[str, Any]:
-    fields = REQUIRED[result.after.stage]
+    fields = REQUIRED[result.after.stage] | {"max_tokens"}
     content = result.after.content().model_dump(mode="json", include=fields)
+    if content.get("max_tokens") is None:
+        content.pop("max_tokens", None)
     return {
         "check_id": result.before.check_id,
         "policy_version": result.decision.policy_version,
@@ -101,8 +106,10 @@ async def check(stage: Stage, body: CheckRequest, request: Request) -> JSONRespo
         message=body.message,
         tool=body.tool,
         tool_result=body.tool_result,
+        max_tokens=body.max_tokens,
         usage=body.usage,
         metadata=body.metadata,
+        run_id=run_id_of(body.messages, body.metadata),
         transport=Transport.check_api,
     )
     result = await state.service.run(check_, policy, identity)
